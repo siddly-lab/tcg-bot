@@ -1,0 +1,9 @@
+services:
+  tcg-bot:
+    build: ./bot
+    container_name: tcg-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./bot:/app/code:ro
+      - ./botdata:/app/data

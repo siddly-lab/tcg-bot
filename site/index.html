@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Riftbound Box Value</title>
+<meta name="description" content="Daily Riftbound card prices, booster box value, pull odds and sealed box returns.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-inner">
+    <div>
+      <h1>Riftbound Box Value</h1>
+      <p class="sub" id="stamp">Loading prices…</p>
+    </div>
+    <button id="theme" class="ghost" aria-label="Toggle dark mode">◐</button>
+  </div>
+  <nav class="wrap tabs" id="tabs">
+    <button data-tab="overview" class="on">Overview</button>
+    <button data-tab="set">Set detail</button>
+    <button data-tab="sealed">Sealed</button>
+    <button data-tab="cards">Card prices</button>
+    <button data-tab="movers">Movers</button>
+    <button data-tab="how">How it works</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <section id="overview" class="tab on">
+    <div id="alerts"></div>
+    <h2>Should you open a box?</h2>
+    <p class="lead">For each set: what a booster box costs today, what the cards inside are worth on average, and what you'd actually pocket after selling fees. Most boxes are worth less than the average, because a few rare hits pull it up.</p>
+    <div class="table-scroll ov-wide"><table id="ov-table" class="data"></table></div>
+    <div id="ov-cards" class="ov-cards"></div>
+    <h2>Opened vs sealed, per box</h2>
+    <div class="chart-box"><canvas id="ov-chart"></canvas></div>
+  </section>
+
+  <section id="set" class="tab">
+    <div class="set-picker" id="set-picker"></div>
+    <div id="set-body"></div>
+  </section>
+
+  <section id="sealed" class="tab">
+    <h2>Sealed product tracker</h2>
+    <p class="lead">Sealed box and case prices against retail price (MSRP). "Per year" is the growth rate since release, shown once a set has been out 90 days. "If sold" is after TCGplayer fees and shipping.</p>
+    <div class="chart-box tall"><canvas id="sealed-chart"></canvas></div>
+    <div class="filters"><label><input type="checkbox" id="sealed-all"> Show all sealed products (decks, bundles, kits)</label></div>
+    <div class="table-scroll"><table id="sealed-table" class="data"></table></div>
+  </section>
+
+  <section id="cards" class="tab">
+    <h2>Card prices</h2>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Search a card…" autocomplete="off">
+      <select id="card-set"></select>
+      <select id="card-kind"></select>
+      <select id="card-sort">
+        <option value="price">Highest price</option>
+        <option value="d7">Biggest 7-day rise</option>
+        <option value="d7down">Biggest 7-day drop</option>
+        <option value="name">Name</option>
+      </select>
+    </div>
+    <div class="table-scroll"><table id="card-table" class="data"></table></div>
+    <p class="muted" id="card-count"></p>
+  </section>
+
+  <section id="movers" class="tab">
+    <h2>Biggest price moves</h2>
+    <p class="lead">Cards and sealed products worth $2 or more.</p>
+    <div class="grid2" id="movers-body"></div>
+  </section>
+
+  <section id="how" class="tab">
+    <h2>How the numbers work</h2>
+    <div class="prose" id="how-body"></div>
+  </section>
+</main>
+<footer class="wrap muted small">Prices from TCGplayer via tcgcsv.com, refreshed daily. Not affiliated with Riot Games or TCGplayer. Not financial advice.</footer>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: ["claude/**"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements-dev.txt -r bot/requirements.txt
+      - run: python -m pytest -q
+  live-build:
+    # Runs the real pipeline against today's prices so a change in TCGplayer's data shows up here, not on the live page.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.txt
+      - run: python -m tcg.build
+      - uses: actions/upload-artifact@v4
+        with: {name: site-preview, path: site, retention-days: 7}
