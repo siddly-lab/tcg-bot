@@ -27,3 +27,9 @@
 - Within a rarity every card is equally likely. Cards under $3 count as bulk at $0.02.
 - From Spiritforged on, rares and epics are priced as foils (that's the only printing TCGplayer lists).
 - K/DA special art cards, oversized cards and promo runes are left out of the box math.
+
+## 0.1.1
+
+- **What was wrong:** the first history backfill went too fast and tcgcsv refused the last 13 days (Oct 21 to Nov 2).
+- **What changed:** archive downloads now pause 3 seconds between days and wait and retry when told to slow down.
+  Every daily run now fills any missing days, so gaps heal on their own.
