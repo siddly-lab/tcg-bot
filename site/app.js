@@ -14,6 +14,7 @@ function css(name){return getComputedStyle(document.documentElement).getProperty
 function palette(){return ["--c1","--c2","--c3","--c4","--c5","--c6"].map(css)}
 function chart(id, cfg){
   if (charts[id]) charts[id].destroy();
+  if (typeof Chart === "undefined") return; // chart library didn't load; tables still work
   const ink = css("--muted"), line = css("--line");
   Chart.defaults.color = ink; Chart.defaults.borderColor = line; Chart.defaults.font.family = "Inter, system-ui, sans-serif";
   cfg.options = Object.assign({responsive:true, maintainAspectRatio:false, interaction:{mode:"index", intersect:false},
@@ -76,7 +77,15 @@ function renderOverview(){
       <td class="num">${beat == null ? "—" : Math.round(beat * 100) + "%"}</td>
       <td>${openWins ? '<span class="pill good">Open</span>' : '<span class="pill info">Hold sealed</span>'}</td></tr>`;
     }).join("") + "</tbody>";
-  document.querySelectorAll("#ov-table [data-set]").forEach(a => a.onclick = ev => {ev.preventDefault(); currentSet = a.dataset.set; showTab("set");});
+  $("#ov-cards").innerHTML = rows.map(s => {
+    const b = s.box || {}, e = s.ev, sim = s.sim.net;
+    const openWins = s.open_vs_hold.sell_sealed_net != null && e.box_net >= s.open_vs_hold.sell_sealed_net;
+    return `<a class="card ov-card" href="#" data-set="${s.code}"><div class="ov-head"><b>${esc(s.name)}</b>${openWins ? '<span class="pill good">Open</span>' : '<span class="pill info">Hold sealed</span>'}</div>
+      <dl><dt>Box price</dt><dd>${money(b.market)} <span class="muted small">${pct(b.vs_msrp)} vs MSRP</span></dd>
+      <dt>Average value inside</dt><dd>${money(e.box_sticker)}</dd><dt>You'd pocket (average)</dt><dd><b>${money(e.box_net)}</b></dd>
+      <dt>Typical box (pocket)</dt><dd>${money(sim.median)}</dd><dt>Chance it pays for itself</dt><dd>${sim.beat_market == null ? "—" : Math.round(sim.beat_market * 100) + "%"}</dd></dl></a>`;
+  }).join("");
+  document.querySelectorAll("#ov-table [data-set], #ov-cards [data-set]").forEach(a => a.onclick = ev => {ev.preventDefault(); currentSet = a.dataset.set; showTab("set");});
 
   const p = palette();
   chart("ov-chart", {type:"bar", data:{labels: rows.map(s => s.name), datasets:[
@@ -173,7 +182,7 @@ function contribTable(s){
 function hitTable(s){
   return `<thead><tr><th>Hit</th><th class="num">Per box</th><th class="num">Chance in a box</th><th class="num">About</th></tr></thead><tbody>` +
     s.hit_odds.map(h => `<tr><td>${esc(h.label)}</td><td class="num">${h.per_box.toFixed(h.per_box < 1 ? 2 : 1)}</td>
-      <td class="num">${Math.round(h.chance_in_box * 100)}%</td><td class="num">${h.boxes_per_hit < 1 ? `${(1/h.boxes_per_hit).toFixed(1)} per box` : oneIn(h.boxes_per_hit)}</td></tr>`).join("") + "</tbody>";
+      <td class="num">${Math.round(h.chance_in_box * 100)}%</td><td class="num">${h.per_box >= 1 ? `${h.per_box.toFixed(1)} per box` : oneIn(h.boxes_per_hit)}</td></tr>`).join("") + "</tbody>";
 }
 function chaseTable(s){
   return `<thead><tr><th></th><th>Card</th><th>Kind</th><th class="num">Price</th><th class="num">Odds for this exact card</th></tr></thead><tbody>` +

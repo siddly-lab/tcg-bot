@@ -5,3 +5,5 @@ data/raw.json
 site/data/
 .env
 bot/data/
+botdata/
+deploy/*.log
