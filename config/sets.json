@@ -1,0 +1,42 @@
+{
+  "_readme": "Pack odds per set. 'source' says how much to trust each figure: official = Riot published it; community = estimated from fan box openings; assumed = our placeholder until better data exists. Edit here when better data comes out.",
+  "selling": {
+    "fee_pct": 0.1325,
+    "per_card_cost": 1.00,
+    "sell_threshold": 3.00,
+    "bulk_value": 0.02,
+    "sealed_fee_pct": 0.1325,
+    "sealed_ship_cost": 12.00,
+    "_notes": "TCGplayer takes about 10.75% plus 2.5% payment processing. per_card_cost covers the $0.30 order fee plus envelope, stamp and toploader. Cards worth less than sell_threshold are treated as bulk."
+  },
+  "default_pack": {
+    "packs_per_box": 24,
+    "boxes_per_case": 6,
+    "slots": [
+      {"name": "Common", "count": 7, "printing": "Normal", "weights": {"Common": 1.0}},
+      {"name": "Uncommon", "count": 3, "printing": "Normal", "weights": {"Uncommon": 1.0}},
+      {"name": "Rare or better", "count": 2, "printing": "Normal", "weights": {"Rare": 0.875, "Epic": 0.125}},
+      {"name": "Foil", "count": 1, "printing": "Foil", "weights": {"Common": 0.55, "Uncommon": 0.30, "Rare": 0.12, "Epic": 0.03}},
+      {"name": "Rune / token", "count": 1, "printing": "Normal", "weights": {"Rune": 0.75, "Token": 0.20, "RuneAlt": 0.05}}
+    ],
+    "specials": {
+      "_comment": "Per-pack chance. A special replaces the foil slot card.",
+      "AltArt": {"per_pack": 0.0833, "source": "community", "note": "About 1 in 12 packs (about 2 per box)."},
+      "Overnumbered": {"per_pack": 0.01389, "source": "official", "note": "Riot: about 1 per 3 boxes."},
+      "Signature": {"per_pack": 0.001389, "source": "official", "note": "Riot: about 1 in 10 Overnumbered cards is signed (about 1 per 30 boxes)."},
+      "Ultimate": {"per_pack": 0.00025, "source": "official", "note": "About 1 in 4,000 packs (Riot's figure for Radiance; assumed the same for other sets that have one)."}
+    },
+    "epic_source": "official",
+    "epic_note": "Riot: about 1 Epic per 4 packs.",
+    "foil_split_source": "assumed",
+    "rune_slot_note": "Rune / token slot split (75% rune, 20% token, 5% alternate-art rune) is assumed."
+  },
+  "sets": [
+    {"code": "OGN", "name": "Origins", "match": ["origins"], "release": "2025-10-31", "msrp_box": 119.99, "msrp_pack": 4.99},
+    {"code": "SFD", "name": "Spiritforged", "match": ["spiritforged", "spirit forged"], "release": "2026-02-13", "msrp_box": 119.99, "msrp_pack": 4.99, "rare_printing": "Foil"},
+    {"code": "UNL", "name": "Unleashed", "match": ["unleashed"], "release": "2026-05-08", "msrp_box": 119.99, "msrp_pack": 4.99, "rare_printing": "Foil"},
+    {"code": "VEN", "name": "Vendetta", "match": ["vendetta"], "release": "2026-07-31", "msrp_box": 119.99, "msrp_pack": 4.99, "rare_printing": "Foil"},
+    {"code": "RAD", "name": "Radiance", "match": ["radiance"], "release": "2026-10-23", "msrp_box": 119.99, "msrp_pack": 4.99, "rare_printing": "Foil"},
+    {"code": "LEG", "name": "Legacy", "match": ["legacy"], "release": "2027-01-29", "msrp_box": 119.99, "msrp_pack": 4.99, "rare_printing": "Foil"}
+  ]
+}
