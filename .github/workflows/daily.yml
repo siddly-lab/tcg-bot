@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: "25 21 * * *"   # tcgcsv refreshes around 20:00 UTC (1pm Pacific)
   workflow_dispatch:
-    inputs:
-      backfill:
-        description: "Fill in missing price history from the daily archives"
-        type: boolean
-        default: false
   push:
     branches: [main]
     paths: ["tcg/**", "site/**", "config/**", ".github/workflows/daily.yml"]
@@ -29,8 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install -r requirements.txt
-      - name: Backfill price history (first run, or when asked)
-        if: ${{ inputs.backfill || hashFiles('data/history/*.json.gz') == '' }}
+      - name: Fill any gaps in the price history (only missing days are downloaded)
         run: pip install py7zr && python -m tcg.backfill
       - run: python -m tcg.build
       - name: Save today's prices to the history

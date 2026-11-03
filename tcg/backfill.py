@@ -12,12 +12,31 @@ import datetime as dt
 import json
 import shutil
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 from . import history, tcgcsv
 
 ARCHIVE = "https://tcgcsv.com/archive/tcgplayer/prices-{d}.ppmd.7z"
+
+
+PAUSE = 3
+
+
+def download(url: str, dest: Path, tries: int = 4):
+    """Download, waiting and retrying when the server says we're going too fast."""
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(url, headers=tcgcsv.UA)
+            with urllib.request.urlopen(req, timeout=300) as r, open(dest, "wb") as f:
+                shutil.copyfileobj(r, f)
+            return
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or i == tries - 1:
+                raise
+            time.sleep(30 * (i + 1))
 
 
 def dates_to_fetch(start: dt.date, end: dt.date, recent_days: int, have: set[str]) -> list[str]:
@@ -70,9 +89,7 @@ def main(argv=None):
         tmp = Path(tempfile.mkdtemp())
         try:
             arc = tmp / "a.7z"
-            req = urllib.request.Request(ARCHIVE.format(d=d), headers=tcgcsv.UA)
-            with urllib.request.urlopen(req, timeout=300) as r, open(arc, "wb") as f:
-                shutil.copyfileobj(r, f)
+            download(ARCHIVE.format(d=d), arc)
             snap = snapshot_from_archive(arc, tcgcsv.RIFTBOUND_CATEGORY, tmp)
             if snap:
                 history.write_snapshot(out, d, snap)
@@ -82,6 +99,7 @@ def main(argv=None):
             print(f"{d}: skipped ({e})", flush=True)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+            time.sleep(PAUSE)  # be polite: tcgcsv rate-limits bursts
     print(f"saved {ok} days")
 
 
