@@ -18,8 +18,11 @@ LABELS = {
     "Common": "Commons", "Uncommon": "Uncommons", "Rare": "Rares", "Epic": "Epics",
     "Rune": "Runes", "RuneAlt": "Alternate-art runes", "Token": "Tokens",
     "AltArt": "Alternate arts", "Overnumbered": "Overnumbered", "Signature": "Signatures",
-    "Ultimate": "Ultimate", "Special": "Special art (not in normal packs)",
+    "Ultimate": "Ultimate", "Special": "Special art (odds unknown, left out)",
 }
+
+
+RUNE_NAME = re.compile(r"^(Fury|Calm|Mind|Body|Chaos|Order) Rune\b")
 
 
 def ext(p: dict, key: str):
@@ -56,8 +59,9 @@ def classify_card(p: dict) -> str | None:
         return None
     if re.match(r"^R\d+b$", number):          # promo runes
         return None
-    if re.match(r"^R\d+a?$", number) or (re.search(r"\brune\b", low) and number.upper().startswith("R")):
-        return "RuneAlt" if number.endswith("a") or rarity == "Showcase" else "Rune"
+    if re.match(r"^R\d+a?$", number) or RUNE_NAME.match(name):
+        alt = number.split("/")[0].endswith("a") or rarity == "Showcase" or "alternate art" in low
+        return "RuneAlt" if alt else "Rune"
     if number.upper().startswith("T") or " // " in name:
         return "Token"
     if rarity in (None, "None", "Promo"):

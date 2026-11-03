@@ -32,6 +32,9 @@ def test_classify_names_from_live_feed():
     assert b("Calm Rune", "Common", "R02") == "Rune"
     assert b("Calm Rune (R02a)", "Showcase", "R02a") == "RuneAlt"
     assert b("Calm Rune (R02b)", "Promo", "R02b") is None
+    # Origins numbers its runes inside the main set
+    assert b("Fury Rune (Alternate Art)", "Showcase", "007a/298") == "RuneAlt"
+    assert b("Fury Rune", "Common", "007/298") == "Rune"
     assert b("Mech // Recruit", "Common", "T06 // T07") == "Token"
     assert b("Reflection // Buff", "None", "T06 // T04") == "Token"
     assert b("Evelynn, In Control (K/DA Special Art Card)", "Showcase", "SP3/005") == "Special"
@@ -143,3 +146,11 @@ def test_history_movers(cfg, tmp_build):
     o = next(s for s in out["sets"] if s["code"] == "OGN")
     assert len(o["ev_series"]) == 2
     assert o["ev_series"][1][1] > o["ev_series"][0][1]
+
+
+def test_backfill_dates():
+    import datetime as dt
+    from tcg import backfill
+    d = backfill.dates_to_fetch(dt.date(2026, 1, 1), dt.date(2026, 2, 28), 10, {"2026-02-27"})
+    assert d[0] == "2026-01-01" and "2026-01-08" in d and "2026-01-02" not in d
+    assert "2026-02-26" in d and "2026-02-27" not in d and d[-1] == "2026-02-28"
