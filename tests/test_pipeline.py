@@ -154,3 +154,16 @@ def test_backfill_dates():
     d = backfill.dates_to_fetch(dt.date(2026, 1, 1), dt.date(2026, 2, 28), 10, {"2026-02-27"})
     assert d[0] == "2026-01-01" and "2026-01-08" in d and "2026-01-02" not in d
     assert "2026-02-26" in d and "2026-02-27" not in d and d[-1] == "2026-02-28"
+
+
+def test_missing_photos_borrow_other_version(cfg):
+    r = fixtures.raw()
+    for p in r["groups"][0]["products"]:
+        if p["name"] == "Sett, The Boss (Signature)":
+            p["imageCount"] = 0
+            sig = p["productId"]
+        if p["name"] == "Sett, The Boss (Overnumbered)":
+            over_img = p["imageUrl"]
+    products, _ = build.shape(r, cfg)
+    assert products[sig]["image"] == over_img and products[sig]["image_standin"]
+    assert build.base_name("Riven, The Exile (Signature)") == "Riven, The Exile"

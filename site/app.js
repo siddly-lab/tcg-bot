@@ -6,6 +6,10 @@ const pct = (v, plus = true) => v == null ? "—" : (plus && v > 0 ? "+" : "") +
 const chg = v => v == null ? '<span class="muted">—</span>' : `<span class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${v.toFixed(1)}%</span>`;
 const oneIn = n => n == null ? "—" : n < 1.05 ? "most boxes" : n < 10 ? `1 in ${n.toFixed(1)} boxes` : `1 in ${Math.round(n).toLocaleString()} boxes`;
 const SOURCE_PILL = {official: '<span class="pill good">Riot</span>', community: '<span class="pill warn">Community estimate</span>', assumed: '<span class="pill bad">Our assumption</span>'};
+// Card picture; falls back to an empty frame if TCGplayer has no photo or it fails to load.
+const thumb = c => c.image
+  ? `<img class="thumb" loading="lazy" src="${esc(c.image)}" alt="" ${c.standin ? 'title="TCGplayer has no photo of this version yet, so this shows the same card\'s other printing"' : ""} onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'thumb'}))">`
+  : `<div class="thumb" title="No photo on TCGplayer yet"></div>`;
 const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
 let D, CARDS, charts = {}, currentSet = null;
@@ -186,7 +190,7 @@ function hitTable(s){
 }
 function chaseTable(s){
   return `<thead><tr><th></th><th>Card</th><th>Kind</th><th class="num">Price</th><th class="num">Odds for this exact card</th></tr></thead><tbody>` +
-    s.chase.map(c => `<tr><td><img class="thumb" loading="lazy" src="${esc(c.image)}" alt=""></td>
+    s.chase.map(c => `<tr><td>${thumb(c)}</td>
       <td><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a> <span class="muted small">${esc(c.number || "")}</span>
       ${c.thin ? ' <span class="pill warn" title="Few recent sales or a wide gap between listings and sales">thin market</span>' : ""}</td>
       <td>${esc(c.label)}</td><td class="num">${money(c.price)}</td><td class="num">${oneIn(c.boxes_per_hit)}</td></tr>`).join("") + "</tbody>";
@@ -239,7 +243,7 @@ function renderCards(){
   rows.sort(sorters[sort]);
   const total = rows.length; rows = rows.slice(0, 200);
   $("#card-table").innerHTML = `<thead><tr><th></th><th>Card</th><th class="hide-sm">Set</th><th class="num">Normal</th><th class="num">Foil</th><th class="num">7 days</th><th class="num hide-sm">30 days</th><th class="num">Pull odds</th></tr></thead><tbody>` +
-    rows.map(c => `<tr><td><img class="thumb" loading="lazy" src="${esc(c.image)}" alt=""></td>
+    rows.map(c => `<tr><td>${thumb(c)}</td>
       <td><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a><div class="muted small">${esc(c.kind)} · ${esc(c.number || "")}${c.thin ? ' · <span class="pill warn">thin market</span>' : ""}</div></td>
       <td class="hide-sm">${esc(c.set)}</td><td class="num">${money(c.normal?.market ?? c.normal?.low)}</td><td class="num">${money(c.foil?.market ?? c.foil?.low)}</td>
       <td class="num">${chg(bestD7(c))}</td><td class="num hide-sm">${chg((c.foil?.market || 0) > (c.normal?.market || 0) ? c.foil?.d30 : c.normal?.d30)}</td>

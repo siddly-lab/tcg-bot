@@ -64,7 +64,8 @@ def shape(raw: dict, cfg: dict) -> tuple[dict[int, dict], list[dict]]:
                 "id": p["productId"], "name": classify.clean_name(p["name"]), "group": grp["name"],
                 "group_id": grp["groupId"], "set": sset["code"] if sset else None,
                 "number": classify.ext(p, "Number"), "rarity": rarity, "url": p.get("url"),
-                "image": p.get("imageUrl"), "prices": prices.get(p["productId"], {}),
+                "image": p.get("imageUrl") if p.get("imageCount", 1) else None,
+                "prices": prices.get(p["productId"], {}),
                 "presale": bool((p.get("presaleInfo") or {}).get("isPresale")),
             }
             if is_sealed:
@@ -75,7 +76,37 @@ def shape(raw: dict, cfg: dict) -> tuple[dict[int, dict], list[dict]]:
             products[rec["id"]] = rec
         if not sset and has_display:
             unknown.append({"name": grp["name"], "published": grp.get("publishedOn")})
+    fill_missing_images(products)
     return products, unknown
+
+
+def fill_missing_images(products: dict[int, dict]) -> None:
+    """TCGplayer often has no photo for Signature and some Overnumbered cards yet.
+
+    Borrow the picture of the same card in the same set: first the version with the same
+    collector number (a Signature 173*/167 uses the Overnumbered 173/167 art), then any version
+    with the same name. Marked so the page can say it's a stand-in.
+    """
+    by_number, by_name = {}, {}
+    for p in products.values():
+        if not p.get("image") or not p.get("set"):
+            continue
+        if p.get("number"):
+            by_number.setdefault((p["set"], p["number"].replace("*", "")), p["image"])
+        by_name.setdefault((p["set"], base_name(p["name"])), p["image"])
+    for p in products.values():
+        if p.get("image") or p.get("sealed") or not p.get("set"):
+            continue
+        img = by_number.get((p["set"], (p.get("number") or "").replace("*", ""))) or by_name.get((p["set"], base_name(p["name"])))
+        if img:
+            p["image"] = img
+            p["image_standin"] = True
+
+
+def base_name(name: str) -> str:
+    """'Riven, The Exile (Signature)' -> 'Riven, The Exile'."""
+    import re
+    return re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
 
 
 def snapshot_of(products: dict[int, dict]) -> dict[str, list]:
@@ -210,7 +241,8 @@ def analyze_set(scfg, cfg, products, hist, today) -> dict:
         chase.append({"id": c["id"], "name": c["name"], "number": c["number"], "bucket": c["bucket"],
                       "label": classify.LABELS.get(c["bucket"]), "price": round(price, 2),
                       "per_box": round(pb, 5), "boxes_per_hit": round(1 / pb, 1) if pb else None,
-                      "url": c["url"], "image": c["image"], "thin": thin_market(c)})
+                      "url": c["url"], "image": c["image"], "standin": bool(c.get("image_standin")),
+                      "thin": thin_market(c)})
     chase.sort(key=lambda x: -x["price"])
     res["chase"] = chase[:20]
     res["hit_odds"] = hit_odds(slots, ppb)
@@ -335,7 +367,7 @@ def card_rows(products, sets_res, hist, today) -> list[dict]:
             continue
         row = {"id": p["id"], "set": p["set"], "name": p["name"], "number": p["number"], "rarity": p["rarity"],
                "kind": classify.LABELS.get(p.get("bucket"), p.get("rarity") or ""), "url": p["url"], "image": p["image"],
-               "thin": thin_market(p)}
+               "standin": bool(p.get("image_standin")), "thin": thin_market(p)}
         for sub, tag in (("Normal", "normal"), ("Foil", "foil")):
             v = p["prices"].get(sub)
             if v:
@@ -419,6 +451,9 @@ def report(latest, products):
     unb = [p["name"] for p in products.values() if p.get("set") and not p.get("sealed") and not p.get("bucket")]
     print(f"\nCards left out of pack math ({len(unb)}): {unb[:30]}")
     print("New sets not in config:", latest["new_sets"])
+    cards = [p for p in products.values() if p.get("set") and not p.get("sealed")]
+    print(f"Card images: {sum(1 for p in cards if p.get('image_standin'))} borrowed from another version, "
+          f"{sum(1 for p in cards if not p.get('image'))} still missing: {[p['name'] for p in cards if not p.get('image')][:15]}")
 
 
 def main(argv=None):
