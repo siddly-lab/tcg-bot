@@ -38,3 +38,7 @@
 
 - **What was wrong:** many Signature and some Overnumbered cards showed a broken picture. TCGplayer has no photo for them yet, but the feed still gives a link.
 - **What changed:** those cards now borrow the picture of the same card's other version (a Signature uses its Overnumbered art). Hovering says it's a stand-in. Anything still without a photo shows an empty frame instead of a broken image.
+
+## 0.1.3
+
+- Card pictures get bigger when you point at them on a computer, and open large when tapped on a phone (tap again or press Esc to close). Uses TCGplayer's large photo when it has one.

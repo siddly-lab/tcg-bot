@@ -26,6 +26,40 @@ function chart(id, cfg){
   charts[id] = new Chart(document.getElementById(id), cfg);
 }
 
+/* ---------------- big picture on hover (tap on phones) ---------------- */
+(function(){
+  const box = document.createElement("div"); box.id = "preview";
+  const img = document.createElement("img"); img.alt = ""; box.appendChild(img); document.body.appendChild(box);
+  // TCGplayer serves a large version of each photo; fall back to the small one if it isn't there.
+  const big = src => src.replace(/_\d+w\.(jpg|png)$/i, "_in_1000x1000.$1");
+  let tapped = false;
+  const show = (el, x, y, pinned) => {
+    const small = el.getAttribute("src");
+    img.onerror = () => { img.onerror = null; img.src = small; };
+    img.src = big(small);
+    box.classList.toggle("pinned", !!pinned); box.classList.add("on");
+    if (!pinned) place(x, y);
+  };
+  const place = (x, y) => {
+    const w = box.offsetWidth || 300, h = box.offsetHeight || 420, pad = 16;
+    let left = x + 24, top = y - h / 2;
+    if (left + w + pad > innerWidth) left = x - w - 24;
+    top = Math.max(pad, Math.min(top, innerHeight - h - pad));
+    box.style.left = Math.max(pad, left) + "px"; box.style.top = top + "px";
+  };
+  const hide = () => { box.classList.remove("on", "pinned"); tapped = false; };
+  const canHover = matchMedia("(hover: hover)").matches;
+  document.addEventListener("mouseover", e => { if (canHover && e.target.matches("img.thumb")) show(e.target, e.clientX, e.clientY); });
+  document.addEventListener("mousemove", e => { if (canHover && e.target.matches("img.thumb") && !box.classList.contains("pinned")) place(e.clientX, e.clientY); });
+  document.addEventListener("mouseout", e => { if (canHover && e.target.matches("img.thumb") && !box.classList.contains("pinned")) hide(); });
+  document.addEventListener("click", e => {
+    if (e.target.matches("img.thumb") && !canHover) { e.preventDefault(); if (tapped) return hide(); show(e.target, 0, 0, true); tapped = true; return; }
+    if (box.classList.contains("pinned")) hide();
+  });
+  addEventListener("scroll", () => { if (!box.classList.contains("pinned")) hide(); }, {passive: true});
+  addEventListener("keydown", e => { if (e.key === "Escape") hide(); });
+})();
+
 /* ---------------- theme + tabs ---------------- */
 (function(){
   const t = store.get("theme"); if (t) document.documentElement.dataset.theme = t;
