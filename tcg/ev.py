@@ -30,6 +30,14 @@ def price_of(card: dict, printing: str | None) -> float:
     return price_sub(card, printing)[0]
 
 
+def sell_price(card: dict, printing: str | None) -> float:
+    """What you could realistically sell for: the last sale, or less if listings have dropped below it
+    (you'd have to undercut them)."""
+    price, sub = price_sub(card, printing)
+    low = ((card.get("prices") or {}).get(sub) or {}).get("low") if sub else None
+    return min(price, low) if low and price and low < price else price
+
+
 def net_value(price: float, selling: dict) -> float:
     """What you'd actually pocket: after fees and shipping supplies, or bulk value if it isn't worth listing."""
     bulk = selling["bulk_value"]
@@ -65,7 +73,7 @@ def slot_values(slots, buckets, selling, bucket_printing=None):
         for b in s["weights"]:
             pr = (bucket_printing or {}).get(b) if b in s.get("upgrades", []) else s["printing"]
             sticker = np.array([price_of(c, pr or s["printing"]) for c in buckets[b]], dtype=float)
-            net = np.array([net_value(x, selling) for x in sticker], dtype=float)
+            net = np.array([net_value(sell_price(c, pr or s["printing"]), selling) for c in buckets[b]], dtype=float)
             vals[b] = (sticker, net)
         out.append(vals)
     return out

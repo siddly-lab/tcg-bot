@@ -85,15 +85,16 @@ def audit_game(common, gcfg, raw):
             buckets[c["bucket"]].append(c)
         slots = ev.build_slots(tmpl, {k: len(v) for k, v in buckets.items()})
         bp = getattr(mod, "BUCKET_PRINTING", {})
+        buckets, _ = build.ev_ready(buckets, slots, bp)
+        inpack = [c for v in buckets.values() for c in v]
         vals = ev.slot_values(slots, buckets, common["selling"], bp)
         e = ev.expected(slots, vals)
         odds = ev.card_odds_per_pack(slots, buckets)
         ppb = tmpl["packs_per_box"]
         contrib = sorted(((odds[c["id"]] * ppb * ev.price_of(c, build.slot_printing(c, slots, bp)), c) for c in inpack), key=lambda x: -x[0])
         tot = e["sticker"] * ppb
-        top = [(c["name"], round(v, 2), f"{v / tot:.0%}", "thin" if build.thin_market(c) else "") for v, c in contrib[:5]]
-        thin_share = sum(v for v, c in contrib if build.thin_market(c)) / tot if tot else 0
-        print(f"  box EV ${tot:.2f}; top cards {top}; share from thin-market cards {thin_share:.0%}")
+        top = [(c["name"], round(v, 2), f"{v / tot:.0%}") for v, c in contrib[:5]]
+        print(f"  box EV ${tot:.2f}; top cards {top}")
         if contrib and contrib[0][0] / tot > 0.2:
             issues["concentration"] += 1
         # 5. sealed products: is the box the right one?
@@ -102,8 +103,8 @@ def audit_game(common, gcfg, raw):
             kinds[p["sealed"]].append((p["name"], build.best(p)[0]))
         for k in ("box", "case", "pack"):
             if len(kinds.get(k, [])) > 1:
-                issues["sealed_ambiguous"] += 1
-                print(f"  AMBIGUOUS {k}: {kinds[k]}")
+                pick = build.canonical(products, s["code"], k)
+                print(f"  variants for {k} (using the cheapest, {pick['name'] if pick else None}): {kinds[k]}")
             elif not kinds.get(k):
                 print(f"  missing {k}")
         # 6. cards left out entirely
