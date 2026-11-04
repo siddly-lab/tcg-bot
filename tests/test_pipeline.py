@@ -239,7 +239,16 @@ def test_onepiece_build(cfg, tmp_build):
     counts = d["card_counts"]
     assert counts["Manga rares"] == 1 and counts["Treasure Rares"] == 1 and counts["SP cards"] == 1
     assert counts["Secret Rare alternate arts"] == 1 and counts["Alternate arts"] == 1
-    assert counts["Super alternate arts and extras (odds unknown, left out)"] == 1
+    assert counts["Special versions with unknown odds (left out)"] == 1
+    def b(n, r):
+        return onepiece.classify_card({"name": n, "extendedData": [{"name": "Rarity", "value": r}, {"name": "Number", "value": "X"}]})
+    assert b("Monkey.D.Luffy (012) (Alternate Art) (Gold-Stamped Signature)", "SR") == "Special"
+    assert b("Monkey.D.Luffy (Wanted Poster)", "SR") == "Special"
+    assert b("Ms. All Sunday (OP14-084) (SP)", "SR") == "SP"
+    assert b("Shanks (Parallel) (Manga) (Alternate Art)", "SEC") == "Manga"
+    assert b("Portgas.D.Ace (118) (Alternate Art)", "SEC") == "SECAlt"
+    assert b("Buggy (P-084) (SP)", "SR") == "SP"
+    assert b("Kouzuki Momonosuke (085)", "R") == "R"
     assert d["chase"][0]["name"] == "Rocks.D.Xebec (118) (Super Alternate Art)" and not d["chase"][0].get("boxes_per_hit")
     manga = next(c for c in d["chase"] if c["name"] == "Sakazuki (Manga)")
     assert manga["boxes_per_hit"] == pytest.approx(40, rel=0.05)

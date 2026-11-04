@@ -15,7 +15,7 @@ from . import ext
 PACK_BUCKETS = ("C", "UC", "R", "L", "SR", "SEC", "AltArt", "SECAlt", "SP", "TR", "Manga")
 LABELS = {"C": "Commons", "UC": "Uncommons", "R": "Rares", "L": "Leaders", "SR": "Super Rares", "SEC": "Secret Rares",
           "AltArt": "Alternate arts", "SECAlt": "Secret Rare alternate arts", "SP": "SP cards", "TR": "Treasure Rares",
-          "Manga": "Manga rares", "Special": "Super alternate arts and extras (odds unknown, left out)"}
+          "Manga": "Manga rares", "Special": "Special versions with unknown odds (left out)"}
 BUCKET_PRINTING = {b: "Foil" for b in ("SR", "SEC", "AltArt", "SECAlt", "SP", "TR", "Manga")}
 SEALED_LABELS = {"box": "Booster box", "case": "Booster box case", "pack": "Booster pack",
                  "sleeved_pack": "Sleeved booster pack", "other": "Other sealed"}
@@ -45,22 +45,33 @@ def card_name(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip()
 
 
+KNOWN_TAGS = {"alternate art", "parallel", "manga", "sp", "tr"}
+CODE_TAG = re.compile(r"^(\d{3}|[A-Z]{1,4}\d{0,2}-\d{3})$")  # "(118)", "(OP14-084)", "(P-084)": just a card number
+
+
+def tags(name: str) -> list[str]:
+    return [t.strip() for t in re.findall(r"\(([^)]*)\)", name)]
+
+
 def classify_card(p: dict) -> str | None:
-    name = (p.get("name") or "").lower()
+    """Only versions with known odds go into the box math. Any other label in the name
+    (Super Alternate Art, Wanted Poster, Gold-Stamped Signature, Box Topper...) is left out."""
+    name = p.get("name") or ""
     rarity = ext(p, "Rarity")
     if rarity in (None, "DON!!", "PR"):
         return None
-    if any(x in name for x in EXTRAS):
+    labels = [t.lower() for t in tags(name) if not CODE_TAG.match(t)]
+    if any(x in name.lower() for x in EXTRAS):
         return None
-    if "super alternate art" in name or "super leader alternate art" in name or "super rare alternate art" in name:
+    if any(t not in KNOWN_TAGS for t in labels):
         return "Special"
-    if "(manga)" in name:
+    if "manga" in labels:
         return "Manga"
-    if rarity == "TR" or "(tr)" in name:
+    if rarity == "TR" or "tr" in labels:
         return "TR"
-    if "(sp)" in name:
+    if "sp" in labels:
         return "SP"
-    if "(alternate art)" in name or "(parallel)" in name:
+    if "alternate art" in labels or "parallel" in labels:
         return "SECAlt" if rarity == "SEC" else "AltArt"
     if rarity in ("C", "UC", "R", "L", "SR", "SEC"):
         return rarity

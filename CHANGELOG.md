@@ -88,7 +88,7 @@
 
 - **One Piece Card Game added** as a third game. Every TCGplayer group selling booster boxes or packs is a set (main OP sets, Extra Boosters, Premium Boosters), grouped by year, with a year of price history filled in on the first run.
 - **Box value for main OP sets** (OP-01 onward), modeled as 12-card packs, 24 per box, 12 boxes per case. Bandai publishes no pull rates, so every rate is a community estimate or our assumption: about 6 to 7 Super Rares per box, a Secret Rare every 1 to 2 boxes, about 1.3 alternate arts per box, an SP card per 6 boxes, a Treasure Rare per case, a Manga rare per 40 boxes. Extra and Premium Boosters get sealed tracking and card prices only.
-- **Left out of the box math:** Super Alternate Arts, Super Leader Alternate Arts, box toppers and other extras, because their odds are unknown. They still appear in chase cards and search with their prices.
+- **Left out of the box math:** any version whose odds are unknown: Super Alternate Arts, Wanted Posters, gold-stamped signatures, box toppers and anything else with an unfamiliar label. Only alternate art / parallel, SP, Manga and Treasure Rare versions count. They still appear in chase cards and search with their prices.
 - **No MSRP yet for One Piece.** I couldn't confirm an official English MSRP, so "vs MSRP", "per year" and the investment comparison stay blank for One Piece until one is added to `config/games/onepiece.json`. Buy labels still work from the 90-day history.
 - "If you sold it" now shows for every sealed product, MSRP or not.
 - On phones the game switcher gets its own row so three games fit.
