@@ -4,7 +4,7 @@ Each function returns a dict: title, description, fields [(name, value, inline)]
 """
 from __future__ import annotations
 
-from .store import best_price
+from .store import best_price, with_year
 
 PURPLE, GREEN, ORANGE = 0x5B4BDB, 0x1D8A55, 0xC2410C
 
@@ -50,7 +50,7 @@ def card_embed(card: dict, game_name: str = "") -> dict:
         fields.append(("Last 90 days", f"{money(card['low90'])} to {money(card['high90'])}\n{card.get('zone_label') or ''}", True))
     if not card.get("sealed"):
         fields.append(("Pull odds", one_in(card.get("boxes_per_hit")), True))
-    where = " · ".join(x for x in (game_name, card.get("set_name") or card.get("set"), card.get("number")) if x)
+    where = " · ".join(x for x in (game_name, with_year(card.get("set_name") or card.get("set"), card.get("set_year")), card.get("number")) if x)
     desc = f"{card.get('kind', '')} · {where}".strip(" ·")
     if card.get("thin"):
         desc += "\n⚠️ Thin market: few recent sales, so treat the price as rough."
@@ -75,7 +75,8 @@ def share_at_least(q: list[float], x: float) -> float:
 def box_embed(s: dict, d: dict, paid: float | None, dash: str, game_name: str = "") -> dict:
     """s: the set's summary row, d: its detail file."""
     h = s.get("hero") or {}
-    title = f"{game_name} · {s['name']}" if game_name else s["name"]
+    name = with_year(s["name"], s.get("year"))
+    title = f"{game_name} · {name}" if game_name else name
     zone = f"\n{h.get('zone_label')} (90 days: {money(h.get('low90'))} to {money(h.get('high90'))})" if h.get("low90") else ""
     if not d.get("modeled"):
         chase = "\n".join(f"{c['name']}: {money(c['price'])}" for c in d.get("chase", [])[:5])
@@ -114,12 +115,12 @@ def sets_embed(summary: dict, dash: str) -> dict:
         price = f"{(h.get('kind_label') or 'box').lower()} {money(h.get('market') or h.get('low'))}"
         zone = f" · {h['zone_label'].lower()}" if h.get("zone_label") and h.get("zone") not in ("normal", "new") else ""
         if s.get("ev"):
-            lines.append(f"**{s['name']}**: {price}{zone} · pocket avg {money(s['ev']['box_net'])} · "
+            lines.append(f"**{with_year(s['name'], s.get('year'))}**: {price}{zone} · pocket avg {money(s['ev']['box_net'])} · "
                          f"{round((s['ev']['beat_market'] or 0) * 100)}% of boxes pay for themselves")
         elif s.get("released"):
-            lines.append(f"**{s['name']}**: {price}{zone}")
+            lines.append(f"**{with_year(s['name'], s.get('year'))}**: {price}{zone}")
         else:
-            lines.append(f"**{s['name']}**: pre-order {price} · releases {s['release']}")
+            lines.append(f"**{with_year(s['name'], s.get('year'))}**: pre-order {price} · releases {s['release']}")
     return {"title": f"{summary['name']} sets, newest first", "url": dash, "color": PURPLE,
             "description": clip("\n".join(lines), 4000) + "\n\n*Pocket = after TCGplayer fees and shipping.*"}
 
@@ -136,7 +137,8 @@ def sealed_embed(summary: dict, dash: str) -> dict:
 def movers_embed(summary: dict, period: str, dash: str) -> dict:
     m = summary["movers"]
     key, up, down, label = ("d1", m["up_1d"], m["down_1d"], "since yesterday") if period == "day" else ("d7", m["up_7d"], m["down_7d"], "this week")
-    fmt = lambda rows: "\n".join(f"{r['name']} ({r.get('set_name') or r['set']}): {money(r['price'])} {chg(r[key])}" for r in rows[:8]) or "Not enough history yet."
+    years = {x["code"]: x.get("year") for x in summary.get("sets", [])}
+    fmt = lambda rows: "\n".join(f"{r['name']} ({with_year(r.get('set_name') or r['set'], years.get(r['set']))}): {money(r['price'])} {chg(r[key])}" for r in rows[:8]) or "Not enough history yet."
     return {"title": f"{summary['name']}: biggest price moves {label}", "url": dash, "color": PURPLE,
             "fields": [("Up", clip(fmt(up), 1024), False), ("Down", clip(fmt(down), 1024), False)]}
 

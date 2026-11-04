@@ -419,7 +419,7 @@ def today_view(sets_summary, sealed_rows, details, today, unknown) -> dict:
     for s in sets_summary:
         rel = s.get("release")
         if rel and rel > today and s.get("hero"):
-            alerts.append({"type": "upcoming", "set": s["code"], "text": f"{s['name']} releases {rel}.",
+            alerts.append({"type": "upcoming", "set": s["code"], "name": s["name"], "release": rel, "text": f"{s['name']} releases {rel}.",
                            "price": s["hero"].get("market") or s["hero"].get("low"), "msrp": s["hero"].get("msrp"),
                            "kind": s["hero"].get("kind_label")})
     slim = lambda r: {k: r.get(k) for k in ("id", "name", "set", "set_name", "kind_label", "market", "low90", "high90", "avg90",
@@ -444,6 +444,11 @@ def run_game(common, gcfg, raw, bench, out_dir: Path, do_backfill: bool) -> dict
         except Exception as e:
             print("history backfill skipped:", e)
     history.write_snapshot(hist_dir, today, snapshot_of(products, keep))
+    # Unreleased sets keep building price history but stay off the dashboard until release day.
+    sets = [s for s in sets if (s.get("release") or "9999") <= today]
+    live = {s["code"] for s in sets}
+    products = {k: p for k, p in products.items() if p["set"] in live}
+    unknown = [u for u in unknown if (u.get("published") or "9999")[:10] <= today]
     hist = history.load_all(hist_dir)
     ctx = Ctx(common, gcfg, mod, products, hist, history.series_index(hist), today, bench)
 

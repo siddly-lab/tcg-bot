@@ -15,11 +15,25 @@ const ZONE = {good_msrp: "good", good_low: "good", normal: "", high: "bad", new:
 const zoneChip = (z, label) => z ? `<span class="chip ${ZONE[z] ?? ""}">${esc(label || z)}</span>` : "";
 const quietChip = (z, label) => z && z !== "normal" ? zoneChip(z, label) + '<div style="height:6px"></div>' : "";
 
-const S = {games: [], game: null, summary: {}, cards: {}, sets: {}, charts: {}, route: {}};
+const S = {games: [], game: null, summary: {}, cards: {}, sets: {}, charts: {}, route: {}, years: {}};
+// "Origins (2025)": set names carry their release year, unless the name already has one
+function yearOf(code){ return S.years[S.route.game]?.[code] || ""; }
+function withYear(name, code, year){
+  const y = year || yearOf(code);
+  return !y || /\b(19|20)\d{2}\b/.test(name || "") ? (name || "") : `${name} (${y})`;
+}
+const setLabel = (name, code, year) => esc(withYear(name, code, year));
+const setHTML = (name, code, year) => { const t = withYear(name, code, year); return t === name ? esc(name) : `${esc(name)} <span class="yr">(${esc(year || yearOf(code))})</span>`; };
 
 /* ---------------- data ---------------- */
 const getJSON = url => fetch(url).then(r => { if (!r.ok) throw new Error(url + " " + r.status); return r.json(); });
-async function summary(g){ return S.summary[g] ||= await getJSON(`data/${g}/summary.json`); }
+async function summary(g){
+  if (!S.summary[g]){
+    S.summary[g] = await getJSON(`data/${g}/summary.json`);
+    S.years[g] = Object.fromEntries(S.summary[g].sets.map(x => [x.code, x.year]));
+  }
+  return S.summary[g];
+}
 async function cards(g){ return S.cards[g] ||= await getJSON(`data/${g}/cards.json`); }
 async function setFile(g, code){
   const sm = await summary(g);
@@ -128,14 +142,14 @@ async function render(){
 /* ---------------- Today ---------------- */
 async function viewToday(v, sm){
   const t = sm.today;
-  const alerts = (t.alerts || []).map(a => `<div class="alert"><span>${a.type === "upcoming" ? "📅" : "✨"}</span><div>${esc(a.text)}${a.price ? ` ${esc(a.kind || "Pre-orders")} at ${money(a.price)}${a.msrp ? ` vs ${money(a.msrp)} MSRP` : ""}.` : ""}</div></div>`).join("");
+  const alerts = (t.alerts || []).map(a => `<div class="alert"><span>${a.type === "upcoming" ? "📅" : "✨"}</span><div>${a.type === "upcoming" ? `<b>${setHTML(a.name, a.set)}</b> releases ${fmtDate(a.release)}.` : esc(a.text)}${a.price ? ` ${esc(a.kind || "Pre-orders")} at ${money(a.price)}${a.msrp ? ` vs ${money(a.msrp)} MSRP` : ""}.` : ""}</div></div>`).join("");
   const signal = r => `<a class="signal" href="${href("set", r.set)}">${art(r.image)}<div>
-      <div class="t">${esc(r.name)}</div><div class="small muted">${esc(r.set_name)} · ${esc(r.kind_label)}</div>
+      <div class="t">${esc(r.name)}</div><div class="small muted">${setLabel(r.set_name, r.set)} · ${esc(r.kind_label)}</div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0"><span class="p">${money(r.market)}</span>${zoneChip(r.zone, r.zone_label)}</div>
       ${range(r.low90, r.high90, r.market, r.msrp)}
       <div class="small muted" style="margin-top:4px">${r.msrp ? `${pct(r.vs_msrp)} vs MSRP · ` : ""}You'd pay about ${money(r.buy_cost)} with tax and shipping</div></div></a>`;
   const chase = c => `<button class="cardtile" data-card="${c.id}" data-set="${esc(c.set)}">${c.image ? `<img loading="lazy" src="${esc(c.image)}" alt="">` : '<div class="ph"></div>'}
-      <div class="t">${esc(c.name)}</div><div class="small muted">${esc(c.set_name)}</div>
+      <div class="t">${esc(c.name)}</div><div class="small muted">${setLabel(c.set_name, c.set)}</div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px"><b class="num">${money(c.price)}</b><span class="small muted">low ${money(c.low90)}</span></div></button>`;
   v.innerHTML = `
     <section style="margin-top:22px"><h1>${esc(sm.name)} today</h1>
@@ -150,7 +164,7 @@ async function viewToday(v, sm){
       <div><h2>Biggest sealed moves this week</h2><div id="t-moves"></div></div>
     </div>`;
   table($("#t-open"), t.open_value, [
-    {key: "name", label: "Set", html: s => `<a href="${href("set", s.code)}"><b>${esc(s.name)}</b></a>`},
+    {key: "name", label: "Set", html: s => `<a href="${href("set", s.code)}"><b>${setHTML(s.name, s.code)}</b></a>`},
     {key: "box", label: "Box", num: 1, html: s => money(s.box)},
     {key: "net", label: "You'd pocket", num: 1, html: s => money(s.box_net)},
     {key: "beat", label: "Pays for itself", num: 1, sort: s => s.beat_market, html: s => Math.round((s.beat_market || 0) * 100) + "%"},
@@ -173,22 +187,22 @@ async function viewSets(v, sm){
     const h = s.hero || {};
     return `<a class="settile" href="${href("set", s.code)}"><div class="art">${art(s.image)}
         ${!s.released ? '<span class="chip info plain badge">Pre-order</span>' : s.modeled ? '<span class="chip plain badge">Box value</span>' : ""}</div>
-      <div class="body"><div class="t">${esc(s.name)}</div><div class="meta">${esc(s.code)} · ${fmtDate(s.release)}</div>
+      <div class="body"><div class="t">${setHTML(s.name, s.code, s.year)}</div><div class="meta">${esc(s.code)} · ${fmtDate(s.release)}</div>
       ${h.zone && h.zone !== "new" && h.zone !== "normal" ? `<div>${zoneChip(h.zone, h.zone_label)}</div>` : ""}
       <div class="row"><div><div class="price">${money(h.market ?? h.low)}</div><div class="meta">${esc(h.kind_label || "")}</div></div>${spark(h.spark)}</div></div></a>`;
   };
   const yrs = g => { const ys = g.sets.map(s => s.year).filter(Boolean).sort(); return ys.length ? (ys[0] === ys[ys.length - 1] ? ys[0] : `${ys[0]}–${ys[ys.length - 1]}`) : ""; };
   v.innerHTML = `<div style="margin-top:22px"><h1>${esc(sm.name)} sets</h1>
       <p class="lead" style="margin-top:6px">${sm.sets.length} sets, newest first${sm.group_by === "era" ? ", grouped by era" : ", grouped by year"}. Each tile shows the main sealed product's price over recent months.</p></div>
-    <div class="filters"><input id="set-q" type="search" placeholder="Find a set by name or code…" autocomplete="off"></div>
+    <div class="filters"><input id="set-q" type="search" placeholder="Find a set by name, code or year…" autocomplete="off"></div>
     <div id="set-groups"></div>`;
   const draw = q => {
     const n = q.trim().toLowerCase();
     $("#set-groups").innerHTML = groups.map(g => {
-      const list = g.sets.filter(s => !n || (s.name + " " + s.code).toLowerCase().includes(n));
+      const list = g.sets.filter(s => !n || (s.name + " " + s.code + " " + (s.year || "")).toLowerCase().includes(n));
       if (!list.length) return "";
       const isOpen = n || open.has(g.k);
-      return `<section class="era"><div class="era-head"><h2>${esc(g.k)}</h2><span class="muted small">${yrs(g)} · ${g.sets.length} set${g.sets.length > 1 ? "s" : ""}</span>
+      return `<section class="era"><div class="era-head"><h2>${esc(g.k)}</h2><span class="muted small">${sm.group_by === "era" ? yrs(g) + " · " : ""}${g.sets.length} set${g.sets.length > 1 ? "s" : ""}</span>
         ${n ? "" : `<button class="btn" data-toggle="${esc(g.k)}" style="margin-left:auto;padding:4px 10px">${isOpen ? "Hide" : "Show"}</button>`}</div>
         ${isOpen ? `<div class="settiles">${list.map(tile).join("")}</div>` : ""}</section>`;
     }).join("") || `<div class="panel empty">No set matches “${esc(q)}”.</div>`;
@@ -209,7 +223,7 @@ async function viewSet(v, sm, code){
   v.innerHTML = `
     <a class="back" href="${href("sets")}">← All ${esc(sm.name)} sets</a>
     <div class="sethead"><div class="art">${art(d.image)}</div><div>
-      <h1>${esc(d.name)}</h1>
+      <h1>${setHTML(d.name, d.code)}</h1>
       <div class="meta"><span class="muted">${[d.era, d.code, d.released ? "Released " + fmtDate(d.release) : "Releases " + fmtDate(d.release)].filter(Boolean).map(esc).join(" · ")}</span>
       ${d.print_status ? `<span class="chip info plain">${esc(d.print_status)}</span>` : ""}${!d.released ? '<span class="chip info plain">Pre-order</span>' : ""}</div></div></div>
 
@@ -368,7 +382,7 @@ function pullText(c){
 function sealedCols(sm, withSet){
   return [
     {key: "name", label: "Product", sort: r => r.name, html: r => `<div class="namecell">${r.image ? `<img class="thumb" style="object-fit:contain" loading="lazy" src="${esc(r.image)}" alt="">` : ""}<div><a href="${withSet ? href("set", r.set) : esc(r.url)}" ${withSet ? "" : 'target="_blank" rel="noopener"'}>${esc(r.name)}</a>
-      <div class="sub">${withSet ? esc(r.set_name) + " · " : ""}${esc(r.kind_label)}${r.presale ? " · pre-order" : ""}</div></div></div>`},
+      <div class="sub">${withSet ? setLabel(r.set_name, r.set) + " · " : ""}${esc(r.kind_label)}${r.presale ? " · pre-order" : ""}</div></div></div>`},
     {key: "price", label: "Price", num: 1, sort: r => r.market ?? r.low, html: r => `<b>${money(r.market ?? r.low)}</b>`},
     {key: "zone", label: "Buy timing", sort: r => r.low90 ? r.market / r.low90 : null, html: r => `${quietChip(r.zone, r.zone_label)}${range(r.low90, r.high90, r.market, r.msrp)}`},
     {key: "pay", label: "You'd pay", num: 1, cls: "hide-sm", sort: r => r.buy_cost, html: r => money(r.buy_cost)},
@@ -392,7 +406,7 @@ async function viewSealed(v, sm){
       <p class="lead" style="margin-top:6px">Every sealed product against MSRP and against its own last 90 days. "Per year" turns the gain over MSRP into a yearly rate once a product has been out 90 days.</p></div>
     <h2>Price by days since release</h2>
     <p class="note">Each set's ${sm.packs.box ? "booster box" : "main product"} lined up by how long it's been out, so you can see where a new set sits compared with older sets at the same age.</p>
-    <div class="filters" id="life-pick">${withLife.map(s => `<button class="btn ${picked.has(s.code) ? "primary" : ""}" data-code="${esc(s.code)}" style="padding:4px 10px">${esc(s.name)}</button>`).join("")}</div>
+    <div class="filters" id="life-pick">${withLife.map(s => `<button class="btn ${picked.has(s.code) ? "primary" : ""}" data-code="${esc(s.code)}" style="padding:4px 10px">${setLabel(s.name, s.code, s.year)}</button>`).join("")}</div>
     <div class="panel"><div class="chart-box tall"><canvas id="c-life"></canvas></div></div>
     <h2>All sealed products</h2>
     <div class="filters"><div class="seg" id="kind">${kinds.map(([k, l]) => `<button data-k="${k}" class="${k === kind ? "on" : ""}">${l}</button>`).join("")}</div>
@@ -402,7 +416,7 @@ async function viewSealed(v, sm){
   const drawLife = () => {
     const p = palette();
     const sets = withLife.filter(s => picked.has(s.code));
-    chart("c-life", {type: "line", data: {datasets: sets.map((s, i) => ({label: s.name, data: s.hero.lifecycle.map(([x, y]) => ({x, y})),
+    chart("c-life", {type: "line", data: {datasets: sets.map((s, i) => ({label: withYear(s.name, s.code, s.year), data: s.hero.lifecycle.map(([x, y]) => ({x, y})),
       borderColor: p[i % p.length], backgroundColor: p[i % p.length], pointRadius: s.hero.lifecycle.length < 15 ? 3 : 0, borderWidth: 2, tension: .2}))},
       options: {interaction: {mode: "nearest", intersect: false}, scales: {x: {type: "linear", title: {display: true, text: "Days since release"}, min: 0}, y: moneyTicks},
         plugins: {tooltip: {callbacks: {title: c => `Day ${c[0].raw.x}`, label: c => `${c.dataset.label}: ${money(c.raw.y)}`}}}}});
@@ -423,7 +437,7 @@ async function viewSealed(v, sm){
 async function viewCards(v, sm){
   v.innerHTML = `<div style="margin-top:22px"><h1>Card prices</h1><p class="lead" style="margin-top:6px">Search any card. Tap one for its price history, 90-day range and pull odds.</p></div>
     <div class="filters"><input id="q" type="search" placeholder="Search a card…" autocomplete="off">
-      <select id="c-set"><option value="">Every set</option>${sm.sets.map(s => `<option value="${esc(s.code)}">${esc(s.name)}</option>`).join("")}</select>
+      <select id="c-set"><option value="">Every set</option>${sm.sets.map(s => `<option value="${esc(s.code)}">${setLabel(s.name, s.code, s.year)}</option>`).join("")}</select>
       <select id="c-sort"><option value="price">Highest price</option><option value="d7">Biggest 7-day rise</option><option value="d7down">Biggest 7-day drop</option><option value="low">Closest to 90-day low</option><option value="name">Name</option></select>
       <label class="check"><input type="checkbox" id="c-low"> Only near 90-day low</label></div>
     <div id="card-table"><p class="muted">Loading cards…</p></div>`;
@@ -437,7 +451,7 @@ async function viewCards(v, sm){
       low: (a, b) => (a.low90 ? a.price / a.low90 : 9) - (b.low90 ? b.price / b.low90 : 9)};
     rows.sort(f[sort]);
     table($("#card-table"), rows, [
-      {key: "name", label: "Card", html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${esc(c.set_name)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div></div></div>`},
+      {key: "name", label: "Card", html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${setLabel(c.set_name, c.set)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div></div></div>`},
       {key: "price", label: "Price", num: 1, html: c => `<b>${money(c.price)}</b><div class="sub small muted">${esc(c.printing || "")}</div>`},
       {key: "d7", label: "7 days", num: 1, html: c => chg(d7(c))},
       {key: "zone", label: "Buy timing", cls: "hide-sm", html: c => quietChip(c.zone, c.zone_label) || '<span class="faint small">Normal</span>'},
@@ -455,7 +469,7 @@ async function viewMovers(v, sm){
     <div class="grid g2"><div><h2>Up since yesterday</h2><div id="m1"></div></div><div><h2>Down since yesterday</h2><div id="m2"></div></div>
     <div><h2>Up this week</h2><div id="m3"></div></div><div><h2>Down this week</h2><div id="m4"></div></div></div>`;
   const cols = key => [
-    {key: "n", label: "Name", html: r => `<div class="namecell">${r.sealed ? "" : thumb(r)}<div><a href="${href("set", r.set)}">${esc(r.name)}</a><div class="sub">${esc(r.set_name || r.set)} · ${esc(r.printing)}</div></div></div>`},
+    {key: "n", label: "Name", html: r => `<div class="namecell">${r.sealed ? "" : thumb(r)}<div><a href="${href("set", r.set)}">${esc(r.name)}</a><div class="sub">${setLabel(r.set_name || r.set, r.set)} · ${esc(r.printing)}</div></div></div>`},
     {key: "p", label: "Price", num: 1, html: r => money(r.price)},
     {key: "c", label: "Change", num: 1, html: r => chg(r[key])},
   ];
@@ -494,7 +508,7 @@ async function openCard(game, id, setCode, detail){
   const chase = d.chase.find(x => x.id === id) || c;
   const big = c.image ? c.image.replace(/_\d+w\.(jpg|png)$/i, "_in_1000x1000.$1") : null;
   body.innerHTML = `<div class="cardview"><div>${c.image ? `<img class="hero" src="${esc(big)}" onerror="this.onerror=null;this.src='${esc(c.image)}'" alt="${esc(c.name)}">` : '<div class="hero ph"></div>'}</div>
-    <div><h2 style="margin-top:0">${esc(c.name)}</h2><div class="muted">${esc(d.name)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div>
+    <div><h2 style="margin-top:0">${esc(c.name)}</h2><div class="muted">${setLabel(d.name, d.code)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div>
       <div style="display:flex;gap:10px;align-items:center;margin:12px 0"><span class="big">${money(c.price)}</span>${zoneChip(c.zone, c.zone_label)}</div>
       ${range(c.low90, c.high90, c.price)}
       <div class="table-scroll" style="margin-top:14px"><table class="data"><thead><tr><th>Printing</th><th class="num">Market</th><th class="num">Lowest listing</th><th class="num">7 days</th><th class="num">30 days</th></tr></thead><tbody>

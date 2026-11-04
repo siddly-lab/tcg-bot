@@ -13,6 +13,13 @@ def norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
 
 
+def with_year(name: str | None, year: str | None) -> str:
+    """'Origins (2025)', unless the name already has a year in it."""
+    if not name or not year or re.search(r"\b(19|20)\d{2}\b", name):
+        return name or ""
+    return f"{name} ({year})"
+
+
 def best_price(card: dict | None, printing: str | None = None) -> tuple[float | None, str | None]:
     """Price for a printing, or the most valuable printing when none is given."""
     if not card:
@@ -44,13 +51,15 @@ class Store:
         self.games, self.summary, self.cards = games, summaries, cards
         self.by_id = {}
         self.set_files = {}
+        self.years = {gid: {x["code"]: x.get("year") for x in s.get("sets", [])} for gid, s in summaries.items()}
         for gid, rows in cards.items():
             for c in rows:
-                self.by_id[c["id"]] = c | {"game": gid}
+                self.by_id[c["id"]] = c | {"game": gid, "set_year": self.years[gid].get(c.get("set")) if gid in self.years else None}
         for gid, s in summaries.items():
             for r in s.get("sealed", []):
                 self.by_id.setdefault(r["id"], {
                     "id": r["id"], "game": gid, "set": r.get("set"), "set_name": r.get("set_name"), "name": r["name"],
+                    "set_year": self.years[gid].get(r.get("set")),
                     "kind": r.get("kind_label"), "url": r["url"], "image": r.get("image"), "sealed": True,
                     "zone_label": r.get("zone_label"), "low90": r.get("low90"), "high90": r.get("high90"),
                     "prices": {"Normal": {"market": r.get("market"), "low": r.get("low"), "d7": r.get("change_7d"), "d30": r.get("change_30d")}}})

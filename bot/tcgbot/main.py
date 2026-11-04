@@ -13,7 +13,7 @@ from discord.ext import tasks
 from . import __version__, format as fmt
 from .config import Settings, load
 from .db import DB
-from .store import Store, best_price
+from .store import Store, best_price, with_year
 
 log = logging.getLogger("tcgbot")
 
@@ -124,7 +124,7 @@ def register(bot: TcgBot):
         out = []
         for c in bot.store.search(current, 25):
             price, _ = best_price(c)
-            label = fmt.clip(f"{c['name']} · {c.get('set_name') or c.get('set') or ''} · {fmt.money(price)}", 100)
+            label = fmt.clip(f"{c['name']} · {with_year(c.get('set_name') or c.get('set') or '', c.get('set_year'))} · {fmt.money(price)}", 100)
             out.append(app_commands.Choice(name=label, value=str(c["id"])))
         return out
 
@@ -132,7 +132,7 @@ def register(bot: TcgBot):
         cur = current.lower()
         out = []
         for gid, s in bot.store.all_sets():
-            label = f"{bot.store.game_name(gid)} · {s['name']} ({s['code']})"
+            label = f"{bot.store.game_name(gid)} · {with_year(s['name'], s.get('year'))} · {s['code']}"
             if cur in label.lower():
                 out.append(app_commands.Choice(name=fmt.clip(label, 100), value=f"{gid}:{s['code']}"))
         return out[:25]

@@ -122,3 +122,15 @@ def test_config_defaults(monkeypatch):
     monkeypatch.delenv("DATA_URL", raising=False)
     s = config.load()
     assert s.data_url == "https://siddly-lab.github.io/tcg-bot/data/"
+
+
+def test_set_names_carry_their_year(store):
+    from tcgbot.store import with_year
+    assert with_year("Origins", "2025") == "Origins (2025)"
+    assert with_year("McDonald's Promos 2023", "2023") == "McDonald's Promos 2023"
+    assert with_year("Origins", None) == "Origins"
+    sig = store.search("sett sig")[0]
+    assert "Origins (2025)" in fmt.card_embed(sig, "Riftbound")["description"]
+    assert "Origins (2025)" in fmt.sets_embed(store.summary["riftbound"], "x")["description"]
+    gid, s = store.set_by("OGN")
+    assert "Origins (2025)" in fmt.box_embed(s, detail(store, gid, s), 120, "x", "Riftbound")["title"]
