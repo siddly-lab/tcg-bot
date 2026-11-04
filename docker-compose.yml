@@ -7,3 +7,13 @@ services:
     volumes:
       - ./bot:/app/code:ro
       - ./botdata:/app/data
+
+  # Checks GitHub every 5 minutes and restarts the bot when its code changes. No DSM task needed.
+  updater:
+    image: alpine:3.20
+    container_name: tcg-bot-updater
+    restart: unless-stopped
+    volumes:
+      - ./:/repo
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["sh", "/repo/deploy/updater-loop.sh"]
