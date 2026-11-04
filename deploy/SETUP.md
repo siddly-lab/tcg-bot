@@ -1,56 +1,44 @@
 # Setting up the Grail Discord bot on the Synology
 
-About 20 minutes, once. After that, updates install themselves within 5 minutes of being merged.
+About 15 minutes, once. After that it updates itself within 5 minutes of any change.
 
-## 1. Create the bot in Discord (about 5 minutes)
+## 1. Create the bot in Discord (about 10 minutes, on your PC)
 
-1. On your PC, go to https://discord.com/developers/applications and sign in.
+1. Go to https://discord.com/developers/applications and sign in.
 2. Click **New Application** (top right). Name it `Grail`, tick the box, click **Create**.
-3. In the left menu click **Bot**. Click **Reset Token**, then **Yes, do it!**, then **Copy**.
-   Paste it into Notepad for a minute. This is the bot's password, so don't share it.
-4. In the left menu click **OAuth2**, then scroll to **OAuth2 URL Generator**.
-   Tick **bot** and **applications.commands**. Under Bot Permissions tick **Send Messages**,
-   **Embed Links** and **Read Message History**.
+3. Left menu → **Bot** → **Reset Token** → **Yes, do it!** → **Copy**. Paste it into Notepad.
+   This is the bot's password: don't share it or post it anywhere.
+4. Left menu → **OAuth2** → scroll to **OAuth2 URL Generator**. Tick **bot** and **applications.commands**.
+   Under Bot Permissions tick **Send Messages**, **Embed Links** and **Read Message History**.
 5. Copy the URL at the bottom, open it in a new tab, pick your server, click **Authorize**.
-6. In the Discord app: **Settings → Advanced → Developer Mode** on. Then right-click your server icon →
-   **Copy Server ID** (paste in Notepad), and right-click the channel for the daily price post →
-   **Copy Channel ID** (paste in Notepad).
+6. In the Discord app: **User Settings (gear) → Advanced → Developer Mode** on.
+   Right-click your server icon → **Copy Server ID** → paste in Notepad.
+   Right-click the channel for the daily price post → **Copy Channel ID** → paste in Notepad.
 
-## 2. Install on the NAS (about 10 minutes)
+## 2. Install it on the NAS (about 3 minutes, one paste)
 
-1. Open DSM in your browser. **Package Center** → search **Git Server** → **Install** (this adds the `git` command).
-   Also install **Text Editor** if you don't have it.
-2. **Control Panel → Task Scheduler → Create → Scheduled Task → User-defined script.**
-   - General tab: Task name `tcg-bot install`, User **root**, untick **Enabled**.
-   - Task Settings tab, paste into Run command:
-     ```
-     git clone https://github.com/siddly-lab/tcg-bot.git /volume1/docker/tcg-bot; bash /volume1/docker/tcg-bot/deploy/install.sh
-     ```
-   - Click **OK**, select the task, click **Run**, then **OK**.
-3. **File Station → docker → tcg-bot.** Right-click `.env` → **Open with Text Editor**.
-   Replace `paste-your-bot-token-here` with the token, and fill in `GUILD_ID` and `CHANNEL_ID`. Save.
-   (If you don't see `.env`, go to File Station **Settings** and tick **Show hidden files**.)
-4. **Container Manager → Project → Create.**
-   - Project name `tcg-bot`, Path: **docker/tcg-bot**, Source: **Use existing docker-compose.yml**.
-   - Click **Next** through to **Done**. It builds for a minute or two, then starts.
-5. In Discord, type `/botstatus`. It should answer with the version and the price date.
+1. Open DSM in your browser → **Control Panel → Task Scheduler → Create → Scheduled Task → User-defined script**.
+2. **General** tab: Task name `grail install`, User **root**, untick **Enabled**.
+3. **Task Settings** tab: paste this into **Run command**, then replace the three `paste-...` parts with your
+   token, server ID and channel ID from Notepad (keep the single quotes):
+   ```
+   TOKEN='paste-token' GUILD='paste-server-id' CHANNEL='paste-channel-id' bash -c "$(curl -fsSL https://raw.githubusercontent.com/siddly-lab/tcg-bot/main/deploy/install.sh)"
+   ```
+4. Click **OK** (accept the warning about root). Select the task → **Run** → **OK**. Wait about 2 minutes.
+5. **Delete the task** afterwards (select it → **Delete**): it contains your token, and it isn't needed again.
 
-## 3. Turn on automatic updates (2 minutes)
+That's it. It downloads the code, saves your settings, starts the bot and starts a small updater next to it.
 
-**Control Panel → Task Scheduler → Create → Scheduled Task → User-defined script.**
-- General tab: Task name `tcg-bot update`, User **root**.
-- Schedule tab: **Run on the following days: Daily**, then under Time pick **Continue running within the same day**,
-  every **5 minutes**, from 00:00 to 23:55.
-- Task Settings tab, Run command:
-  ```
-  bash /volume1/docker/tcg-bot/deploy/update.sh
-  ```
-- **OK**.
+## 3. Check it
 
-It checks GitHub every 5 minutes and restarts the bot only when the bot's code changed. The daily
-price updates don't restart it. The log is at `docker/tcg-bot/deploy/update.log`.
+- In Discord, type `/botstatus`. It answers with the version and the price date.
+- Try `/watch add` on a card or box you want, for example the Radiance booster box below $100.
+- If `/botstatus` doesn't appear after a few minutes: in **File Station → docker**, open
+  `tcg-bot-install.log`. It shows what happened (the token is never written to it). Send me what it says.
 
-## What lives only on the NAS
+## Good to know
 
-`.env` (the token) and `botdata/` (alerts and collections). Updates never touch them. They're
-worth adding to your Hyper Backup task, since the drives have no redundancy.
+- Both containers (`tcg-bot`, `tcg-bot-updater`) show in **Container Manager → Container**.
+- Your alerts and collection live in `docker/tcg-bot/botdata`, and your token in `docker/tcg-bot/.env`.
+  Updates never touch them. Add the `docker/tcg-bot` folder to your Hyper Backup task.
+- To change the token or channel later, run the same install command again with the new values.
