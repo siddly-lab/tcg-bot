@@ -1,36 +1,526 @@
 "use strict";
+/* TCG Box Value — one page, routed by the address bar: #/<game>/<view>/<param> */
+
 const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 const money = v => v == null || isNaN(v) ? "—" : (Math.abs(v) >= 100 ? "$" + Math.round(v).toLocaleString() : "$" + v.toFixed(2));
 const pct = (v, plus = true) => v == null ? "—" : (plus && v > 0 ? "+" : "") + (v * 100).toFixed(Math.abs(v) < 0.1 ? 1 : 0) + "%";
-const chg = v => v == null ? '<span class="muted">—</span>' : `<span class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${v.toFixed(1)}%</span>`;
+const chg = v => v == null ? '<span class="faint">—</span>' : `<span class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "+" : ""}${v.toFixed(1)}%</span>`;
 const oneIn = n => n == null ? "—" : n < 1.05 ? "most boxes" : n < 10 ? `1 in ${n.toFixed(1)} boxes` : `1 in ${Math.round(n).toLocaleString()} boxes`;
-const SOURCE_PILL = {official: '<span class="pill good">Riot</span>', community: '<span class="pill warn">Community estimate</span>', assumed: '<span class="pill bad">Our assumption</span>'};
-// Card picture; falls back to an empty frame if TCGplayer has no photo or it fails to load.
-const thumb = c => c.image
-  ? `<img class="thumb" loading="lazy" src="${esc(c.image)}" alt="" ${c.standin ? 'title="TCGplayer has no photo of this version yet, so this shows the same card\'s other printing"' : ""} onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'thumb'}))">`
-  : `<div class="thumb" title="No photo on TCGplayer yet"></div>`;
+const fmtDate = d => d ? new Date(d + "T12:00").toLocaleDateString(undefined, {month: "short", day: "numeric", year: "numeric"}) : "—";
 const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const SOURCE = {official: '<span class="chip good plain">Publisher</span>', community: '<span class="chip warn plain">Community estimate</span>', assumed: '<span class="chip bad plain">Our assumption</span>'};
+const ZONE = {good_msrp: "good", good_low: "good", normal: "", high: "bad", new: "plain"};
+const zoneChip = (z, label) => z ? `<span class="chip ${ZONE[z] ?? ""}">${esc(label || z)}</span>` : "";
+const quietChip = (z, label) => z && z !== "normal" ? zoneChip(z, label) + '<div style="height:6px"></div>' : "";
 
-let D, CARDS, charts = {}, currentSet = null;
+const S = {games: [], game: null, summary: {}, cards: {}, sets: {}, charts: {}, route: {}};
 
-function css(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()}
-function palette(){return ["--c1","--c2","--c3","--c4","--c5","--c6"].map(css)}
-function chart(id, cfg){
-  if (charts[id]) charts[id].destroy();
-  if (typeof Chart === "undefined") return; // chart library didn't load; tables still work
-  const ink = css("--muted"), line = css("--line");
-  Chart.defaults.color = ink; Chart.defaults.borderColor = line; Chart.defaults.font.family = "Inter, system-ui, sans-serif";
-  cfg.options = Object.assign({responsive:true, maintainAspectRatio:false, interaction:{mode:"index", intersect:false},
-    plugins:{legend:{labels:{boxWidth:12, boxHeight:12}}}}, cfg.options || {});
-  charts[id] = new Chart(document.getElementById(id), cfg);
+/* ---------------- data ---------------- */
+const getJSON = url => fetch(url).then(r => { if (!r.ok) throw new Error(url + " " + r.status); return r.json(); });
+async function summary(g){ return S.summary[g] ||= await getJSON(`data/${g}/summary.json`); }
+async function cards(g){ return S.cards[g] ||= await getJSON(`data/${g}/cards.json`); }
+async function setFile(g, code){
+  const sm = await summary(g);
+  const s = sm.sets.find(x => x.code === code);
+  if (!s) return null;
+  return S.sets[g + ":" + code] ||= await getJSON(`data/${g}/${s.file}`);
 }
+
+/* ---------------- tiny components ---------------- */
+function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function palette(){ return ["--c1","--c2","--c3","--c4","--c5","--c6","--c7","--c8"].map(css); }
+function chart(id, cfg){
+  if (S.charts[id]) S.charts[id].destroy();
+  if (typeof Chart === "undefined" || !document.getElementById(id)) return; // chart library didn't load; tables still work
+  Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line"); Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+  cfg.options = Object.assign({responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+    plugins: {legend: {labels: {boxWidth: 12, boxHeight: 12}}}}, cfg.options || {});
+  S.charts[id] = new Chart(document.getElementById(id), cfg);
+}
+const moneyTicks = {ticks: {callback: v => "$" + Number(v).toLocaleString()}};
+const tipMoney = {callbacks: {label: c => `${c.dataset.label}: ${money(c.raw?.y ?? c.raw)}`}};
+
+function thumb(c){
+  return c.image
+    ? `<img class="thumb" loading="lazy" src="${esc(c.image)}" alt="" ${c.standin ? 'title="TCGplayer has no photo of this version yet, so this shows the same card\'s other printing"' : ""} onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'thumb'}))">`
+    : `<div class="thumb" title="No photo on TCGplayer yet"></div>`;
+}
+function art(src, cls = ""){
+  return src ? `<img class="${cls}" loading="lazy" src="${esc(src)}" alt="" onerror="this.style.visibility='hidden'">` : `<div class="ph ${cls}"></div>`;
+}
+// Where today's price sits between its 90-day low and high, with MSRP marked.
+function range(low, high, now, msrp){
+  if (low == null || high == null || now == null) return '<span class="faint small">Building history</span>';
+  const lo = Math.min(low, now), hi = Math.max(high, now), span = hi - lo || 1;
+  const at = v => (Math.max(0, Math.min(1, (v - lo) / span)) * 100).toFixed(1) + "%";
+  const msrpIn = msrp != null && msrp >= lo && msrp <= hi;
+  const note = msrp != null && !msrpIn ? `<span class="faint">MSRP ${money(msrp)} is ${msrp < lo ? "below" : "above"} this range</span>` : "";
+  return `<div class="range" title="Last 90 days: ${money(low)} to ${money(high)}${msrp ? `. MSRP ${money(msrp)}` : ""}">
+    <div class="track">${msrpIn ? `<span class="msrp" style="left:${at(msrp)}" title="MSRP ${money(msrp)}"></span>` : ""}<span class="dot" style="left:${at(now)}"></span></div>
+    <div class="ends"><span>${money(lo)}</span>${note}<span>${money(hi)}</span></div></div>`;
+}
+function spark(vals, w = 110, h = 30){
+  if (!vals || vals.length < 2) return "";
+  const lo = Math.min(...vals), hi = Math.max(...vals), sp = hi - lo || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - 2 - (v - lo) / sp * (h - 4)).toFixed(1)}`).join(" ");
+  const up = vals[vals.length - 1] >= vals[0];
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${up ? "var(--good)" : "var(--bad)"}" stroke-width="1.75" stroke-linejoin="round"/></svg>`;
+}
+function dots(share){
+  const n = Math.round((share ?? 0) * 100);
+  return `<div class="dots" role="img" aria-label="${n} out of 100 boxes">${Array.from({length: 100}, (_, i) => `<i class="${i < n ? "win" : ""}"></i>`).join("")}</div>`;
+}
+function shareAtLeast(q, x){
+  const n = q.length - 1;
+  if (x <= q[0]) return 1; if (x > q[n]) return 0;
+  for (let i = 1; i <= n; i++) if (q[i] >= x){ const f = q[i] === q[i-1] ? 0 : (x - q[i-1]) / (q[i] - q[i-1]); return 1 - (i - 1 + f) / n; }
+  return 0;
+}
+// Sortable table: cols = [{key,label,num,sort:(row)=>value,html:(row)=>string,cls}]
+function table(el, rows, cols, opts = {}){
+  let key = opts.sort || null, dir = opts.dir || -1, shown = opts.page || 100;
+  const draw = () => {
+    const c = cols.find(c => c.key === key);
+    const list = c ? [...rows].sort((a, b) => { const x = c.sort(a), y = c.sort(b); return (x == null) - (y == null) || (x < y ? -dir : x > y ? dir : 0); }) : rows;
+    el.innerHTML = `<div class="table-scroll"><table class="data"><thead><tr>${cols.map(c => `<th class="${c.num ? "num" : ""} ${c.cls || ""}" ${c.sort ? `data-sort="${c.key}"` : ""}>${c.label}${key === c.key ? `<span class="arrow">${dir > 0 ? "▲" : "▼"}</span>` : ""}</th>`).join("")}</tr></thead>
+      <tbody>${list.slice(0, shown).map((r, i) => `<tr class="${opts.onRow ? "click" : ""}" data-i="${rows.indexOf(r)}">${cols.map(c => `<td class="${c.num ? "num" : ""} ${c.cls || ""}">${c.html(r)}</td>`).join("")}</tr>`).join("") ||
+      `<tr><td colspan="${cols.length}" class="empty">${opts.empty || "Nothing to show."}</td></tr>`}</tbody></table></div>
+      ${list.length > shown ? `<div class="more"><button class="btn">Show ${Math.min(100, list.length - shown)} more of ${list.length - shown}</button></div>` : ""}`;
+    $$("th[data-sort]", el).forEach(th => th.onclick = () => { const k = th.dataset.sort; dir = key === k ? -dir : -1; key = k; draw(); });
+    $(".more button", el)?.addEventListener("click", () => { shown += 100; draw(); });
+    if (opts.onRow) $$("tbody tr[data-i]", el).forEach(tr => tr.onclick = e => { if (e.target.closest("a")) return; opts.onRow(rows[+tr.dataset.i]); });
+  };
+  draw();
+}
+
+/* ---------------- routing ---------------- */
+function parse(){
+  const [g, view, ...rest] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  const game = S.games.find(x => x.id === g)?.id || store.get("game") || S.games[0]?.id;
+  return {game, view: view || "today", param: rest.join("/") || null};
+}
+const go = (view, param, game = S.route.game) => { location.hash = `#/${game}/${view}${param ? "/" + encodeURIComponent(param) : ""}`; };
+const href = (view, param, game = S.route.game) => `#/${game}/${view}${param ? "/" + encodeURIComponent(param) : ""}`;
+
+async function render(){
+  const r = S.route = parse();
+  store.set("game", r.game);
+  $("#games").innerHTML = S.games.map(g => `<a role="tab" href="#/${g.id}/${r.view === "set" ? "sets" : r.view}" class="${g.id === r.game ? "on" : ""}">${esc(g.name)}</a>`).join("");
+  const tabView = r.view === "set" ? "sets" : r.view === "card" ? "cards" : r.view;
+  $$("#tabs a").forEach(a => { a.href = href(a.dataset.view); a.classList.toggle("on", a.dataset.view === tabView); if (a.classList.contains("on")) a.scrollIntoView({block: "nearest", inline: "center"}); });
+  Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
+  const v = $("#view");
+  try {
+    const sm = await summary(r.game);
+    $("#stamp").textContent = `${sm.name} prices from ${fmtDate(sm.price_date)}.`;
+    document.title = `${sm.name} · TCG Box Value`;
+    const views = {today: viewToday, sets: viewSets, set: viewSet, sealed: viewSealed, cards: viewCards, card: viewCards, movers: viewMovers, how: viewHow};
+    await (views[r.view] || viewToday)(v, sm, r.param);
+    if (r.view === "card" && r.param) openCard(r.game, r.param);
+  } catch (e) {
+    console.error(e);
+    v.innerHTML = `<p class="pad muted">Couldn't load the prices. Try refreshing the page.</p>`;
+  }
+}
+
+/* ---------------- Today ---------------- */
+async function viewToday(v, sm){
+  const t = sm.today;
+  const alerts = (t.alerts || []).map(a => `<div class="alert"><span>${a.type === "upcoming" ? "📅" : "✨"}</span><div>${esc(a.text)}${a.price ? ` ${esc(a.kind || "Pre-orders")} at ${money(a.price)}${a.msrp ? ` vs ${money(a.msrp)} MSRP` : ""}.` : ""}</div></div>`).join("");
+  const signal = r => `<a class="signal" href="${href("set", r.set)}">${art(r.image)}<div>
+      <div class="t">${esc(r.name)}</div><div class="small muted">${esc(r.set_name)} · ${esc(r.kind_label)}</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0"><span class="p">${money(r.market)}</span>${zoneChip(r.zone, r.zone_label)}</div>
+      ${range(r.low90, r.high90, r.market, r.msrp)}
+      <div class="small muted" style="margin-top:4px">${r.msrp ? `${pct(r.vs_msrp)} vs MSRP · ` : ""}You'd pay about ${money(r.buy_cost)} with tax and shipping</div></div></a>`;
+  const chase = c => `<button class="cardtile" data-card="${c.id}" data-set="${esc(c.set)}">${c.image ? `<img loading="lazy" src="${esc(c.image)}" alt="">` : '<div class="ph"></div>'}
+      <div class="t">${esc(c.name)}</div><div class="small muted">${esc(c.set_name)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px"><b class="num">${money(c.price)}</b><span class="small muted">low ${money(c.low90)}</span></div></button>`;
+  v.innerHTML = `
+    <section style="margin-top:22px"><h1>${esc(sm.name)} today</h1>
+      <p class="lead" style="margin-top:6px">Sealed products at a good price, chase cards near their lows, and whether any box is worth opening. Prices from ${fmtDate(sm.price_date)}.</p>${alerts}</section>
+    <h2>Good prices on sealed right now</h2>
+    <p class="note">At or below MSRP, or within ${Math.round(sm.zones.near_low_pct * 100)}% of the lowest price in the last 90 days.</p>
+    <div class="grid g3">${t.buy_signals.map(signal).join("") || `<div class="panel empty">Nothing is near its 90-day low or at MSRP today.</div>`}</div>
+    <h2>Chase cards near their 90-day low</h2>
+    <div class="tiles">${t.chase_near_low.map(chase).join("") || `<div class="panel empty" style="grid-column:1/-1">No $20+ chase cards are near their lows today.</div>`}</div>
+    <div class="grid g2" style="margin-top:8px">
+      <div><h2>Worth opening?</h2><div id="t-open"></div></div>
+      <div><h2>Biggest sealed moves this week</h2><div id="t-moves"></div></div>
+    </div>`;
+  table($("#t-open"), t.open_value, [
+    {key: "name", label: "Set", html: s => `<a href="${href("set", s.code)}"><b>${esc(s.name)}</b></a>`},
+    {key: "box", label: "Box", num: 1, html: s => money(s.box)},
+    {key: "net", label: "You'd pocket", num: 1, html: s => money(s.box_net)},
+    {key: "beat", label: "Pays for itself", num: 1, sort: s => s.beat_market, html: s => Math.round((s.beat_market || 0) * 100) + "%"},
+  ], {empty: "No box values for this game yet."});
+  table($("#t-moves"), t.sealed_moves, [
+    {key: "name", label: "Product", html: r => `<a href="${href("set", r.set)}">${esc(r.name)}</a>`},
+    {key: "p", label: "Price", num: 1, html: r => money(r.market)},
+    {key: "c", label: "7 days", num: 1, html: r => chg(r.change_7d)},
+  ], {empty: "Not enough history for weekly moves yet."});
+  $$("[data-card]", v).forEach(b => b.onclick = () => openCard(sm.game, b.dataset.card, b.dataset.set));
+}
+
+/* ---------------- Sets browser ---------------- */
+async function viewSets(v, sm){
+  const groupKey = s => sm.group_by === "era" ? (s.era || "Other") : (s.year || "Upcoming");
+  const groups = [];
+  for (const s of sm.sets){ const k = groupKey(s); let g = groups.find(x => x.k === k); if (!g) groups.push(g = {k, sets: []}); g.sets.push(s); }
+  const open = new Set(JSON.parse(store.get("open-" + sm.game) || "null") || groups.slice(0, 2).map(g => g.k));
+  const tile = s => {
+    const h = s.hero || {};
+    return `<a class="settile" href="${href("set", s.code)}"><div class="art">${art(s.image)}
+        ${!s.released ? '<span class="chip info plain badge">Pre-order</span>' : s.modeled ? '<span class="chip plain badge">Box value</span>' : ""}</div>
+      <div class="body"><div class="t">${esc(s.name)}</div><div class="meta">${esc(s.code)} · ${fmtDate(s.release)}</div>
+      ${h.zone && h.zone !== "new" && h.zone !== "normal" ? `<div>${zoneChip(h.zone, h.zone_label)}</div>` : ""}
+      <div class="row"><div><div class="price">${money(h.market ?? h.low)}</div><div class="meta">${esc(h.kind_label || "")}</div></div>${spark(h.spark)}</div></div></a>`;
+  };
+  const yrs = g => { const ys = g.sets.map(s => s.year).filter(Boolean).sort(); return ys.length ? (ys[0] === ys[ys.length - 1] ? ys[0] : `${ys[0]}–${ys[ys.length - 1]}`) : ""; };
+  v.innerHTML = `<div style="margin-top:22px"><h1>${esc(sm.name)} sets</h1>
+      <p class="lead" style="margin-top:6px">${sm.sets.length} sets, newest first${sm.group_by === "era" ? ", grouped by era" : ", grouped by year"}. Each tile shows the main sealed product's price over recent months.</p></div>
+    <div class="filters"><input id="set-q" type="search" placeholder="Find a set by name or code…" autocomplete="off"></div>
+    <div id="set-groups"></div>`;
+  const draw = q => {
+    const n = q.trim().toLowerCase();
+    $("#set-groups").innerHTML = groups.map(g => {
+      const list = g.sets.filter(s => !n || (s.name + " " + s.code).toLowerCase().includes(n));
+      if (!list.length) return "";
+      const isOpen = n || open.has(g.k);
+      return `<section class="era"><div class="era-head"><h2>${esc(g.k)}</h2><span class="muted small">${yrs(g)} · ${g.sets.length} set${g.sets.length > 1 ? "s" : ""}</span>
+        ${n ? "" : `<button class="btn" data-toggle="${esc(g.k)}" style="margin-left:auto;padding:4px 10px">${isOpen ? "Hide" : "Show"}</button>`}</div>
+        ${isOpen ? `<div class="settiles">${list.map(tile).join("")}</div>` : ""}</section>`;
+    }).join("") || `<div class="panel empty">No set matches “${esc(q)}”.</div>`;
+    $$("[data-toggle]").forEach(b => b.onclick = () => { const k = b.dataset.toggle; open.has(k) ? open.delete(k) : open.add(k); store.set("open-" + sm.game, JSON.stringify([...open])); draw($("#set-q").value); });
+  };
+  $("#set-q").oninput = e => draw(e.target.value);
+  draw("");
+}
+
+/* ---------------- Set detail ---------------- */
+async function viewSet(v, sm, code){
+  const d = await setFile(sm.game, code);
+  if (!d){ v.innerHTML = `<p class="pad">That set isn't listed. <a href="${href("sets")}">See all sets</a>.</p>`; return; }
+  const s = sm.sets.find(x => x.code === code);
+  const hero = d.sealed.find(r => r.id === (d.canonical.box ?? d.canonical.etb ?? d.canonical.bundle ?? d.canonical.pack)) || d.sealed[0] || {};
+  const b = hero;
+  const bench = b.bench;
+  v.innerHTML = `
+    <a class="back" href="${href("sets")}">← All ${esc(sm.name)} sets</a>
+    <div class="sethead"><div class="art">${art(d.image)}</div><div>
+      <h1>${esc(d.name)}</h1>
+      <div class="meta"><span class="muted">${[d.era, d.code, d.released ? "Released " + fmtDate(d.release) : "Releases " + fmtDate(d.release)].filter(Boolean).map(esc).join(" · ")}</span>
+      ${d.print_status ? `<span class="chip info plain">${esc(d.print_status)}</span>` : ""}${!d.released ? '<span class="chip info plain">Pre-order</span>' : ""}</div></div></div>
+
+    <h2>Is now a good time to buy?</h2>
+    <div class="buybox">
+      <div class="panel main">
+        <div class="sub">${esc(b.kind_label || "Sealed")} · market price</div>
+        <div class="big">${money(b.market ?? b.low)}</div>
+        <div style="margin:8px 0 12px">${zoneChip(b.zone, b.zone_label)}</div>
+        ${range(b.low90, b.high90, b.market, b.msrp)}
+        <div class="kpis" style="grid-template-columns:1fr 1fr;margin-bottom:0">
+          <div><div class="sub">You'd pay</div><b class="num">${money(b.buy_cost)}</b><div class="sub">cheapest listing + tax + shipping</div></div>
+          <div><div class="sub">vs MSRP ${money(b.msrp)}</div><b class="num">${pct(b.vs_msrp)}</b><div class="sub">${b.annualized != null ? pct(b.annualized) + " per year since release" : "per-year rate after 90 days"}</div></div>
+          <div><div class="sub">Last 30 days</div><b class="num">${chg(b.change_30d)}</b></div>
+          <div><div class="sub">If you sold it</div><b class="num">${money(b.net_if_sold)}</b><div class="sub">after fees and shipping</div></div>
+        </div>
+      </div>
+      <div class="panel"><div class="chart-box"><canvas id="c-price"></canvas></div></div>
+    </div>
+    <div class="grid g2" style="margin-top:14px">
+      <div><h3>Cheapest way to get packs</h3><div id="ways"></div><p class="note">Includes tax and shipping. Elite Trainer Boxes also come with sleeves, dice and other extras, so their per-pack cost looks higher.</p></div>
+      <div><h3>Compared with other places for the money</h3>${benchHTML(bench, sm)}</div>
+    </div>
+    ${d.modeled ? openingHTML(d, b) : `<h2>Opening value</h2><div class="panel pad-in muted">There's no reliable pack data for this set, so it gets buy timing and card prices but no box value.</div>`}
+    <h2>Chase cards</h2>
+    <p class="note">The most valuable cards in the set. "Pull it" is what you'd expect to spend opening boxes until you hit that exact card, after selling everything else you pull.</p>
+    <div id="chase"></div>
+    <h2>Every sealed ${esc(d.name)} product</h2>
+    <div id="sealed-list"></div>
+    ${d.modeled ? `<h2>Pack odds used</h2><div class="table-scroll"><table class="data"><thead><tr><th>What</th><th>Rate</th><th>Source</th></tr></thead><tbody>
+      ${d.odds_notes.map(o => `<tr><td>${esc(o.what)}</td><td>${esc(o.rate)}</td><td>${SOURCE[o.source] || esc(o.source)}</td></tr>`).join("")}</tbody></table></div>
+      <p class="note">Cards in this set's box math: ${Object.entries(d.card_counts).map(([k, n]) => `${n} ${esc(k.toLowerCase())}`).join(", ")}. Every card of the same rarity is treated as equally likely.</p>` : ""}`;
+
+  // price chart with MSRP and the 90-day range
+  const ser = b.series || [];
+  if (ser.length > 1){
+    const p = palette();
+    chart("c-price", {type: "line", data: {labels: ser.map(x => x[0]), datasets: [
+      {label: `${b.kind_label} price`, data: ser.map(x => x[1]), borderColor: p[0], backgroundColor: p[0], pointRadius: ser.length < 20 ? 3 : 0, borderWidth: 2, tension: .2},
+      ...(b.msrp ? [{label: "MSRP", data: ser.map(() => b.msrp), borderColor: p[2], borderDash: [5, 4], pointRadius: 0, borderWidth: 1.5}] : []),
+    ]}, options: {scales: {x: {ticks: {maxTicksLimit: 7}}, y: moneyTicks}, plugins: {tooltip: tipMoney}}});
+  } else $("#c-price").closest(".chart-box").innerHTML = '<p class="empty">Price history builds up with each daily update.</p>';
+
+  table($("#ways"), d.ways_to_buy, [
+    {key: "l", label: "Buy as", html: w => `<a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.label)}</a>`},
+    {key: "n", label: "Packs", num: 1, html: w => w.packs},
+    {key: "c", label: "You'd pay", num: 1, html: w => money(w.buy_cost)},
+    {key: "pp", label: "Per pack", num: 1, html: (w, i) => `<b>${money(w.per_pack)}</b>`},
+  ], {empty: "No sealed prices yet."});
+
+  if (d.modeled) setupOpening(d, b);
+  table($("#chase"), d.chase, chaseCols(d), {onRow: c => openCard(sm.game, c.id, d.code, d), page: 12});
+  table($("#sealed-list"), d.sealed, sealedCols(sm, false), {sort: "price"});
+}
+
+function benchHTML(bench, sm){
+  if (!bench) return `<div class="panel pad-in muted">Shown once a product has been out for 90 days and has an MSRP.</div>`;
+  const t = sm.benchmark_tax;
+  const row = (label, v, after) => `<tr><td>${label}</td><td class="num"><b>${pct(v)}</b></td><td class="num">${after == null ? "—" : pct(after)}</td></tr>`;
+  return `<div class="table-scroll"><table class="data"><thead><tr><th>Same money since release (${Math.round(bench.days / 30.4)} months)</th><th class="num">Return</th><th class="num">After federal tax</th></tr></thead><tbody>
+    ${row("This product, bought at MSRP", bench.sealed, bench.after_tax.sealed)}
+    ${bench.spy != null ? row("S&amp;P 500 index fund", bench.spy, bench.after_tax.spy) : ""}
+    ${bench.tbill != null ? row("Treasury bills", bench.tbill, bench.after_tax.tbill) : ""}</tbody></table></div>
+    <p class="note">Sealed is valued at today's market price, before selling fees. Taxed at ${Math.round(t.collectibles_tax * 100)}% for collectibles, ${Math.round(t.stock_tax * 100)}% for stocks and ${Math.round(t.interest_tax * 100)}% for interest, assuming you held over a year. The S&amp;P figure is price only, without dividends.</p>`;
+}
+
+function openingHTML(d, b){
+  return `<h2>Is it worth opening?</h2>
+    <div class="paid"><label for="paid"><b>What I paid for a box</b></label><input id="paid" type="number" min="1" step="1">
+      <button class="btn" data-paid="${b.market || ""}">Market ${money(b.market)}</button>${b.msrp ? `<button class="btn" data-paid="${b.msrp}">MSRP ${money(b.msrp)}</button>` : ""}
+      ${b.buy_cost ? `<button class="btn" data-paid="${b.buy_cost}">Cheapest delivered ${money(b.buy_cost)}</button>` : ""}</div>
+    <div class="buybox">
+      <div class="panel main"><div class="sub">You'd pocket from an average box</div><div class="big" id="o-net"></div><div class="sub" id="o-net-h"></div>
+        <div style="margin-top:16px" class="sub">Out of 100 boxes, how many pay for themselves</div>
+        <div style="display:flex;gap:16px;align-items:center;margin-top:6px"><div id="o-dots"></div><div><div class="big" id="o-beat"></div><div class="sub" id="o-beat-h"></div></div></div></div>
+      <div class="panel pad-in"><div class="kpis" id="o-kpis" style="margin:0"></div><div class="verdict" id="o-verdict"></div></div>
+    </div>
+    <div class="grid g2" style="margin-top:14px">
+      <div><h3>Where a box's value comes from</h3><div id="contrib"></div>
+        ${d.top10_share != null ? `<p class="note"><b>${Math.round(d.top10_share * 100)}%</b> of an average box's value comes from the set's 10 most valuable cards. The higher this is, the more a box's value depends on a few cards holding their price.</p>` : ""}</div>
+      <div><h3>How often you hit</h3><div id="hits"></div></div>
+    </div>
+    ${d.ev_series && d.ev_series.length > 1 ? `<h3>Box value over time</h3><div class="panel"><div class="chart-box"><canvas id="c-ev"></canvas></div></div>` : ""}`;
+}
+
+function setupOpening(d, b){
+  const key = "paid-" + S.route.game + "-" + d.code;
+  const saved = parseFloat(store.get(key));
+  const inp = $("#paid");
+  inp.value = (!isNaN(saved) ? saved : (b.market || d.msrp?.box || 100)).toFixed(2);
+  const e = d.ev, n = d.sim.net, st = d.sim.sticker;
+  const update = () => {
+    const paid = parseFloat(inp.value) || b.market || d.msrp?.box;
+    store.set(key, String(paid));
+    const beat = shareAtLeast(n.quantiles, paid), beatSt = shareAtLeast(st.quantiles, paid);
+    $("#o-net").textContent = money(e.box_net);
+    $("#o-net-h").innerHTML = `after TCGplayer fees, shipping and bulk · <b>${pct(e.box_net / paid - 1)}</b> on ${money(paid)}`;
+    $("#o-dots").innerHTML = dots(beat);
+    $("#o-beat").textContent = Math.round(beat * 100);
+    $("#o-beat-h").textContent = `${Math.round(beatSt * 100)} before selling costs`;
+    $("#o-kpis").innerHTML = [
+      ["Average value inside", money(e.box_sticker), "at market prices"],
+      ["Typical box", money(n.median), "half do better, half worse"],
+      ["Bad box / great box", `${money(n.p10)} / ${money(n.p90)}`, "1 in 10 below / above"],
+      ["Sell it sealed instead", money(d.open_vs_hold.sell_sealed_net), "today's market, after fees"],
+    ].map(([k, v, h]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="h">${h}</div></div>`).join("");
+    const gap = e.box_net - paid;
+    $("#o-verdict").innerHTML = `<b>${esc(d.open_vs_hold.verdict)}</b> At ${money(paid)}, an average box ${gap >= 0 ? "makes" : "loses"} about ${money(Math.abs(gap))} once you sell the cards.`;
+  };
+  inp.oninput = update;
+  $$("[data-paid]").forEach(btn => btn.onclick = () => { inp.value = (+btn.dataset.paid).toFixed(2); update(); });
+  update();
+  const max = Math.max(...d.contrib.map(c => c.box_sticker));
+  table($("#contrib"), d.contrib, [
+    {key: "l", label: "Cards", html: c => esc(c.label)},
+    {key: "s", label: "Market", num: 1, html: c => money(c.box_sticker)},
+    {key: "n", label: "Pocket", num: 1, html: c => money(c.box_net)},
+    {key: "b", label: "", cls: "hide-sm", html: c => `<div class="bar" style="width:${(c.box_sticker / max * 100).toFixed(1)}%"></div>`},
+  ]);
+  table($("#hits"), d.hit_odds, [
+    {key: "l", label: "Hit", html: h => esc(h.label)},
+    {key: "p", label: "Per box", num: 1, html: h => h.per_box.toFixed(h.per_box < 1 ? 2 : 1)},
+    {key: "c", label: "Chance in a box", num: 1, html: h => Math.round(h.chance_in_box * 100) + "%"},
+    {key: "a", label: "About", num: 1, html: h => h.per_box >= 1 ? `${h.per_box.toFixed(1)} per box` : oneIn(h.boxes_per_hit)},
+  ]);
+  if (d.ev_series && d.ev_series.length > 1){
+    const p = palette();
+    chart("c-ev", {type: "line", data: {labels: d.ev_series.map(r => r[0]), datasets: [
+      {label: "Box price", data: d.ev_series.map(r => r[3]), borderColor: p[0], pointRadius: 0, borderWidth: 2, spanGaps: true},
+      {label: "Average value inside", data: d.ev_series.map(r => r[1]), borderColor: p[1], pointRadius: 0, borderWidth: 2},
+      {label: "You'd pocket", data: d.ev_series.map(r => r[2]), borderColor: p[2], pointRadius: 0, borderWidth: 2},
+    ]}, options: {scales: {x: {ticks: {maxTicksLimit: 7}}, y: moneyTicks}, plugins: {tooltip: tipMoney}}});
+  }
+}
+
+function chaseCols(d){
+  return [
+    {key: "name", label: "Card", sort: c => c.name, html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${esc(c.kind)} ${c.number ? "· " + esc(c.number) : ""}${c.thin ? ' · <span class="chip warn plain" title="Few recent sales">thin market</span>' : ""}</div></div></div>`},
+    {key: "price", label: "Price", num: 1, sort: c => c.price, html: c => `<b>${money(c.price)}</b>`},
+    {key: "zone", label: "Buy timing", sort: c => c.low90 ? c.price / c.low90 : null, html: c => `${quietChip(c.zone, c.zone_label)}${range(c.low90, c.high90, c.price)}`},
+    ...(d.modeled ? [
+      {key: "odds", label: "Odds", num: 1, sort: c => c.boxes_per_hit, html: c => `${oneIn(c.boxes_per_hit)}<div class="sub small muted only-sm">${c.pull_boxes >= 2 && c.pull_cost > 0 ? "Pull ≈ " + money(c.pull_cost) : ""}</div>`},
+      {key: "bvp", label: "Buy it vs pull it", cls: "hide-sm", sort: c => c.pull_cost, html: c => `<div class="buyvs">${pullText(c)}</div>`},
+    ] : []),
+  ];
+}
+
+function pullText(c){
+  const buy = `Buy: <b>${money(c.buy_cost)}</b>`;
+  if (c.pull_cost == null) return buy;
+  if (c.pull_boxes < 2) return `${buy}<br>Usually in a box`;
+  if (c.pull_cost <= 0) return `${buy}<br>Pull: boxes pay for themselves on average`;
+  return `${buy}<br>Pull: <b>${money(c.pull_cost)}</b> over ~${Math.round(c.pull_boxes).toLocaleString()} boxes`;
+}
+
+function sealedCols(sm, withSet){
+  return [
+    {key: "name", label: "Product", sort: r => r.name, html: r => `<div class="namecell">${r.image ? `<img class="thumb" style="object-fit:contain" loading="lazy" src="${esc(r.image)}" alt="">` : ""}<div><a href="${withSet ? href("set", r.set) : esc(r.url)}" ${withSet ? "" : 'target="_blank" rel="noopener"'}>${esc(r.name)}</a>
+      <div class="sub">${withSet ? esc(r.set_name) + " · " : ""}${esc(r.kind_label)}${r.presale ? " · pre-order" : ""}</div></div></div>`},
+    {key: "price", label: "Price", num: 1, sort: r => r.market ?? r.low, html: r => `<b>${money(r.market ?? r.low)}</b>`},
+    {key: "zone", label: "Buy timing", sort: r => r.low90 ? r.market / r.low90 : null, html: r => `${quietChip(r.zone, r.zone_label)}${range(r.low90, r.high90, r.market, r.msrp)}`},
+    {key: "pay", label: "You'd pay", num: 1, cls: "hide-sm", sort: r => r.buy_cost, html: r => money(r.buy_cost)},
+    {key: "msrp", label: "vs MSRP", num: 1, sort: r => r.vs_msrp, html: r => pct(r.vs_msrp)},
+    {key: "yr", label: "Per year", num: 1, cls: "hide-sm", sort: r => r.annualized, html: r => r.annualized == null ? '<span class="faint">—</span>' : pct(r.annualized)},
+    {key: "spy", label: "S&amp;P 500 same time", num: 1, cls: "hide-sm", sort: r => r.bench?.spy, html: r => r.bench?.spy == null ? '<span class="faint">—</span>' : pct(r.bench.spy)},
+    {key: "d30", label: "30 days", num: 1, sort: r => r.change_30d, html: r => chg(r.change_30d)},
+  ];
+}
+
+/* ---------------- Sealed ---------------- */
+async function viewSealed(v, sm){
+  const kinds = [["box", "Boxes"], ["etb", "Elite Trainer Boxes"], ["bundle", "Bundles"], ["case", "Cases"], ["pack", "Packs"], ["all", "Everything"]]
+    .filter(([k]) => k === "all" || sm.sealed.some(r => r.kind === k));
+  let kind = store.get("sealed-kind-" + sm.game) || "box";
+  if (!kinds.some(([k]) => k === kind)) kind = kinds[0][0];
+  const eras = [...new Set(sm.sets.map(s => s.era).filter(Boolean))];
+  const withLife = sm.sets.filter(s => s.hero?.lifecycle?.length > 1);
+  let picked = new Set(JSON.parse(store.get("life-" + sm.game) || "null") || withLife.slice(0, 6).map(s => s.code));
+  v.innerHTML = `<div style="margin-top:22px"><h1>Sealed tracker</h1>
+      <p class="lead" style="margin-top:6px">Every sealed product against MSRP and against its own last 90 days. "Per year" turns the gain over MSRP into a yearly rate once a product has been out 90 days.</p></div>
+    <h2>Price by days since release</h2>
+    <p class="note">Each set's ${sm.packs.box ? "booster box" : "main product"} lined up by how long it's been out, so you can see where a new set sits compared with older sets at the same age.</p>
+    <div class="filters" id="life-pick">${withLife.map(s => `<button class="btn ${picked.has(s.code) ? "primary" : ""}" data-code="${esc(s.code)}" style="padding:4px 10px">${esc(s.name)}</button>`).join("")}</div>
+    <div class="panel"><div class="chart-box tall"><canvas id="c-life"></canvas></div></div>
+    <h2>All sealed products</h2>
+    <div class="filters"><div class="seg" id="kind">${kinds.map(([k, l]) => `<button data-k="${k}" class="${k === kind ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${eras.length > 1 ? `<select id="era"><option value="">Every era</option>${eras.map(e => `<option>${esc(e)}</option>`).join("")}</select>` : ""}
+      <label class="check"><input type="checkbox" id="goodonly"> Only good prices</label></div>
+    <div id="sealed-table"></div>`;
+  const drawLife = () => {
+    const p = palette();
+    const sets = withLife.filter(s => picked.has(s.code));
+    chart("c-life", {type: "line", data: {datasets: sets.map((s, i) => ({label: s.name, data: s.hero.lifecycle.map(([x, y]) => ({x, y})),
+      borderColor: p[i % p.length], backgroundColor: p[i % p.length], pointRadius: s.hero.lifecycle.length < 15 ? 3 : 0, borderWidth: 2, tension: .2}))},
+      options: {interaction: {mode: "nearest", intersect: false}, scales: {x: {type: "linear", title: {display: true, text: "Days since release"}, min: 0}, y: moneyTicks},
+        plugins: {tooltip: {callbacks: {title: c => `Day ${c[0].raw.x}`, label: c => `${c.dataset.label}: ${money(c.raw.y)}`}}}}});
+  };
+  $$("#life-pick button").forEach(b => b.onclick = () => { const c = b.dataset.code; picked.has(c) ? picked.delete(c) : picked.add(c); b.classList.toggle("primary"); store.set("life-" + sm.game, JSON.stringify([...picked])); drawLife(); });
+  drawLife();
+  const draw = () => {
+    const era = $("#era")?.value, good = $("#goodonly").checked;
+    const rows = sm.sealed.filter(r => (kind === "all" || r.kind === kind) && (!era || r.era === era) && (!good || (r.zone || "").startsWith("good")));
+    table($("#sealed-table"), rows, sealedCols(sm, true), {sort: "price", empty: "No products match."});
+  };
+  $$("#kind button").forEach(b => b.onclick = () => { kind = b.dataset.k; store.set("sealed-kind-" + sm.game, kind); $$("#kind button").forEach(x => x.classList.toggle("on", x === b)); draw(); });
+  $("#era")?.addEventListener("change", draw); $("#goodonly").onchange = draw;
+  draw();
+}
+
+/* ---------------- Cards ---------------- */
+async function viewCards(v, sm){
+  v.innerHTML = `<div style="margin-top:22px"><h1>Card prices</h1><p class="lead" style="margin-top:6px">Search any card. Tap one for its price history, 90-day range and pull odds.</p></div>
+    <div class="filters"><input id="q" type="search" placeholder="Search a card…" autocomplete="off">
+      <select id="c-set"><option value="">Every set</option>${sm.sets.map(s => `<option value="${esc(s.code)}">${esc(s.name)}</option>`).join("")}</select>
+      <select id="c-sort"><option value="price">Highest price</option><option value="d7">Biggest 7-day rise</option><option value="d7down">Biggest 7-day drop</option><option value="low">Closest to 90-day low</option><option value="name">Name</option></select>
+      <label class="check"><input type="checkbox" id="c-low"> Only near 90-day low</label></div>
+    <div id="card-table"><p class="muted">Loading cards…</p></div>`;
+  const all = await cards(sm.game);
+  const d7 = c => c.prices?.[c.printing]?.d7;
+  const draw = () => {
+    const q = $("#q").value.trim().toLowerCase(), set = $("#c-set").value, sort = $("#c-sort").value, low = $("#c-low").checked;
+    let rows = all.filter(c => (!q || c.name.toLowerCase().includes(q)) && (!set || c.set === set) && (!low || c.zone === "good_low"));
+    const f = {price: (a, b) => (b.price || 0) - (a.price || 0), name: (a, b) => a.name.localeCompare(b.name),
+      d7: (a, b) => (d7(b) ?? -1e9) - (d7(a) ?? -1e9), d7down: (a, b) => (d7(a) ?? 1e9) - (d7(b) ?? 1e9),
+      low: (a, b) => (a.low90 ? a.price / a.low90 : 9) - (b.low90 ? b.price / b.low90 : 9)};
+    rows.sort(f[sort]);
+    table($("#card-table"), rows, [
+      {key: "name", label: "Card", html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${esc(c.set_name)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div></div></div>`},
+      {key: "price", label: "Price", num: 1, html: c => `<b>${money(c.price)}</b><div class="sub small muted">${esc(c.printing || "")}</div>`},
+      {key: "d7", label: "7 days", num: 1, html: c => chg(d7(c))},
+      {key: "zone", label: "Buy timing", cls: "hide-sm", html: c => quietChip(c.zone, c.zone_label) || '<span class="faint small">Normal</span>'},
+      {key: "odds", label: "Pull odds", num: 1, cls: "hide-sm", html: c => c.boxes_per_hit ? oneIn(c.boxes_per_hit) : '<span class="faint">—</span>'},
+    ], {onRow: c => openCard(sm.game, c.id, c.set), empty: "No cards match."});
+  };
+  ["#q", "#c-set", "#c-sort", "#c-low"].forEach(id => $(id).addEventListener("input", draw));
+  draw();
+}
+
+/* ---------------- Movers ---------------- */
+async function viewMovers(v, sm){
+  const m = sm.movers;
+  v.innerHTML = `<div style="margin-top:22px"><h1>Biggest price moves</h1><p class="lead" style="margin-top:6px">Cards and sealed products worth $2 or more.</p></div>
+    <div class="grid g2"><div><h2>Up since yesterday</h2><div id="m1"></div></div><div><h2>Down since yesterday</h2><div id="m2"></div></div>
+    <div><h2>Up this week</h2><div id="m3"></div></div><div><h2>Down this week</h2><div id="m4"></div></div></div>`;
+  const cols = key => [
+    {key: "n", label: "Name", html: r => `<div class="namecell">${r.sealed ? "" : thumb(r)}<div><a href="${href("set", r.set)}">${esc(r.name)}</a><div class="sub">${esc(r.set_name || r.set)} · ${esc(r.printing)}</div></div></div>`},
+    {key: "p", label: "Price", num: 1, html: r => money(r.price)},
+    {key: "c", label: "Change", num: 1, html: r => chg(r[key])},
+  ];
+  const empty = "Needs more price history. This fills in after a few daily updates.";
+  table($("#m1"), m.up_1d.slice(0, 10), cols("d1"), {empty}); table($("#m2"), m.down_1d.slice(0, 10), cols("d1"), {empty});
+  table($("#m3"), m.up_7d.slice(0, 10), cols("d7"), {empty}); table($("#m4"), m.down_7d.slice(0, 10), cols("d7"), {empty});
+}
+
+/* ---------------- How it works ---------------- */
+async function viewHow(v, sm){
+  const s = sm.selling, b = sm.buying, z = sm.zones, t = sm.benchmark_tax;
+  v.innerHTML = `<div class="prose" style="margin-top:22px"><h1>How the numbers work</h1>
+  <h2>Prices</h2><p>Every day this page pulls TCGplayer's prices through tcgcsv.com. "Market" is TCGplayer's market price, based on recent sales. When something has no recent sales, the cheapest listing is used instead. Cards marked <span class="chip warn plain">thin market</span> have few sales, so treat their price as rough.</p>
+  <h2>Buy timing</h2><p>Each product's price is compared with its own last 90 days:</p>
+  <p>${zoneChip("good_msrp", "At or below MSRP")} costs no more than retail. ${zoneChip("good_low", "Near its 90-day low")} is within ${Math.round(z.near_low_pct * 100)}% of the lowest price in 90 days. ${zoneChip("high", "Above its usual price")} is at least ${Math.round(z.above_usual_pct * 100)}% over its 90-day average. ${zoneChip("normal", "In its normal range")} is everything else. A product needs ${z.min_points} saved prices in the last 90 days before it gets a label.</p>
+  <p>"You'd pay" is the cheapest listing plus ${(b.sales_tax * 100).toFixed(2)}% sales tax and estimated shipping (about ${money(b.ship_sealed.box)} for a box, ${money(b.ship_single)} for a single card).</p>
+  <h2>Is it worth opening?</h2><p><b>Average value inside</b> is what a box's cards are worth on average at market prices. Rare hits add a lot to the average even though most boxes never see one.</p>
+  <p><b>You'd pocket</b> is what you'd get after selling: TCGplayer keeps about ${(s.fee_pct * 100).toFixed(2)}% of each sale, and each card shipped costs about ${money(s.per_card_cost)} in fees and supplies. Cards under ${money(s.sell_threshold)} count as bulk at ${money(s.bulk_value)} each.</p>
+  <p><b>Out of 100 boxes</b> comes from opening 10,000 virtual boxes with the pack odds listed on each set's page. Each odds figure is labeled ${SOURCE.official}, ${SOURCE.community} or ${SOURCE.assumed}.</p>
+  <h2>Buy it vs pull it</h2><p>For a chase card, "pull it" is the boxes you'd expect to open before hitting that exact card, times what each box loses after you sell the rest of its cards. When that's far above the card's price, buying the single is the better deal.</p>
+  <h2>Compared with other investments</h2><p>For products out 90 days or more: what the MSRP would have earned in an S&amp;P 500 index fund or Treasury bills over the same time. After-tax figures use ${Math.round(t.collectibles_tax * 100)}% for collectibles, ${Math.round(t.stock_tax * 100)}% for stocks and ${Math.round(t.interest_tax * 100)}% for interest (federal long-term rates; state tax not included).</p>
+  <h2>What this leaves out</h2><p>Your time listing cards, card condition (everything is priced as near mint), grading, and the fact that selling many copies at once pushes the price down. TCGplayer and eBay report sales to the IRS on a 1099-K.</p>
+  <p class="muted small">Version ${esc(sm.version)} · built ${esc(sm.generated_at)} · ${sm.history_days} days of price history for ${esc(sm.name)}.</p></div>`;
+}
+
+/* ---------------- card detail modal ---------------- */
+async function openCard(game, id, setCode, detail){
+  id = +id;
+  const modal = $("#modal"), body = $("#modal-body");
+  modal.hidden = false; document.body.style.overflow = "hidden";
+  body.innerHTML = '<p class="muted pad">Loading…</p>';
+  let c = null, d = detail;
+  if (!setCode){ const all = await cards(game); setCode = all.find(x => x.id === id)?.set; }
+  if (setCode){ d = d || await setFile(game, setCode); c = d?.cards.find(x => x.id === id); }
+  if (!c){ body.innerHTML = '<p class="pad muted">Card not found.</p>'; return; }
+  const chase = d.chase.find(x => x.id === id) || c;
+  const big = c.image ? c.image.replace(/_\d+w\.(jpg|png)$/i, "_in_1000x1000.$1") : null;
+  body.innerHTML = `<div class="cardview"><div>${c.image ? `<img class="hero" src="${esc(big)}" onerror="this.onerror=null;this.src='${esc(c.image)}'" alt="${esc(c.name)}">` : '<div class="hero ph"></div>'}</div>
+    <div><h2 style="margin-top:0">${esc(c.name)}</h2><div class="muted">${esc(d.name)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div>
+      <div style="display:flex;gap:10px;align-items:center;margin:12px 0"><span class="big">${money(c.price)}</span>${zoneChip(c.zone, c.zone_label)}</div>
+      ${range(c.low90, c.high90, c.price)}
+      <div class="table-scroll" style="margin-top:14px"><table class="data"><thead><tr><th>Printing</th><th class="num">Market</th><th class="num">Lowest listing</th><th class="num">7 days</th><th class="num">30 days</th></tr></thead><tbody>
+        ${Object.entries(c.prices).map(([sub, p]) => `<tr><td>${esc(sub)}</td><td class="num">${money(p.market)}</td><td class="num">${money(p.low)}</td><td class="num">${chg(p.d7)}</td><td class="num">${chg(p.d30)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="kpis">${c.boxes_per_hit ? `<div class="kpi"><div class="k">Pull odds</div><div class="v">${oneIn(c.boxes_per_hit)}</div></div>` : ""}
+        ${chase.buy_cost ? `<div class="kpi"><div class="k">Buy it</div><div class="v">${money(chase.buy_cost)}</div><div class="h">with tax and shipping</div></div>` : ""}
+        ${chase.pull_cost != null && chase.pull_boxes >= 2 ? `<div class="kpi"><div class="k">Pull it</div><div class="v">${chase.pull_cost > 0 ? money(chase.pull_cost) : "$0"}</div><div class="h">expected net cost, over ~${Math.round(chase.pull_boxes).toLocaleString()} boxes</div></div>` : ""}</div>
+      <a class="btn primary" href="${esc(c.url)}" target="_blank" rel="noopener">See it on TCGplayer</a></div></div>
+    <div class="chart-box" style="padding:12px 0 0"><canvas id="c-card"></canvas></div>`;
+  const ser = c.series || [];
+  if (ser.length > 1){
+    chart("c-card", {type: "line", data: {labels: ser.map(x => x[0]), datasets: [{label: `${c.printing} price`, data: ser.map(x => x[1]), borderColor: palette()[0], pointRadius: ser.length < 20 ? 3 : 0, borderWidth: 2, tension: .2}]},
+      options: {scales: {x: {ticks: {maxTicksLimit: 6}}, y: moneyTicks}, plugins: {tooltip: tipMoney, legend: {display: false}}}});
+  } else $("#c-card").parentElement.innerHTML = '<p class="note">Price history builds up with each daily update.</p>';
+}
+function closeModal(){
+  $("#modal").hidden = true; document.body.style.overflow = "";
+  if (S.charts["c-card"]) { S.charts["c-card"].destroy(); delete S.charts["c-card"]; }
+  if (S.route.view === "card") history.replaceState(null, "", href("cards"));
+}
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal" || e.target.closest(".close")) closeModal(); });
 
 /* ---------------- big picture on hover (tap on phones) ---------------- */
 (function(){
   const box = document.createElement("div"); box.id = "preview";
   const img = document.createElement("img"); img.alt = ""; box.appendChild(img); document.body.appendChild(box);
-  // TCGplayer serves a large version of each photo; fall back to the small one if it isn't there.
   const big = src => src.replace(/_\d+w\.(jpg|png)$/i, "_in_1000x1000.$1");
   let tapped = false;
   const show = (el, x, y, pinned) => {
@@ -49,276 +539,32 @@ function chart(id, cfg){
   };
   const hide = () => { box.classList.remove("on", "pinned"); tapped = false; };
   const canHover = matchMedia("(hover: hover)").matches;
-  document.addEventListener("mouseover", e => { if (canHover && e.target.matches("img.thumb")) show(e.target, e.clientX, e.clientY); });
-  document.addEventListener("mousemove", e => { if (canHover && e.target.matches("img.thumb") && !box.classList.contains("pinned")) place(e.clientX, e.clientY); });
-  document.addEventListener("mouseout", e => { if (canHover && e.target.matches("img.thumb") && !box.classList.contains("pinned")) hide(); });
+  const isThumb = t => t.matches && t.matches("img.thumb");
+  document.addEventListener("mouseover", e => { if (canHover && isThumb(e.target)) show(e.target, e.clientX, e.clientY); });
+  document.addEventListener("mousemove", e => { if (canHover && isThumb(e.target) && !box.classList.contains("pinned")) place(e.clientX, e.clientY); });
+  document.addEventListener("mouseout", e => { if (canHover && isThumb(e.target) && !box.classList.contains("pinned")) hide(); });
   document.addEventListener("click", e => {
-    if (e.target.matches("img.thumb") && !canHover) { e.preventDefault(); if (tapped) return hide(); show(e.target, 0, 0, true); tapped = true; return; }
+    if (isThumb(e.target) && !canHover){ e.preventDefault(); e.stopPropagation(); if (tapped) return hide(); show(e.target, 0, 0, true); tapped = true; return; }
     if (box.classList.contains("pinned")) hide();
-  });
+  }, true);
   addEventListener("scroll", () => { if (!box.classList.contains("pinned")) hide(); }, {passive: true});
-  addEventListener("keydown", e => { if (e.key === "Escape") hide(); });
+  addEventListener("keydown", e => { if (e.key === "Escape"){ hide(); if (!$("#modal").hidden) closeModal(); } });
 })();
 
-/* ---------------- theme + tabs ---------------- */
+/* ---------------- theme ---------------- */
 (function(){
   const t = store.get("theme"); if (t) document.documentElement.dataset.theme = t;
   $("#theme").onclick = () => {
     const dark = matchMedia("(prefers-color-scheme: dark)").matches;
     const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
     const next = cur === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next; store.set("theme", next); renderAll();
+    document.documentElement.dataset.theme = next; store.set("theme", next); render();
   };
-  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 })();
-function showTab(name){
-  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
-  document.querySelectorAll(".tab").forEach(s => s.classList.toggle("on", s.id === name));
-  store.set("tab", name);
-  if (name === "set") renderSet(); if (name === "sealed") renderSealed();
-}
 
-/* ---------------- helpers ---------------- */
-// Share of simulated boxes worth at least `x`, read off the stored percentiles.
-function shareAtLeast(quantiles, x){
-  const n = quantiles.length - 1;
-  if (x <= quantiles[0]) return 1; if (x > quantiles[n]) return 0;
-  for (let i = 1; i <= n; i++){
-    if (quantiles[i] >= x){
-      const lo = quantiles[i-1], hi = quantiles[i];
-      const f = hi === lo ? 0 : (x - lo) / (hi - lo);
-      return 1 - ((i - 1 + f) / n);
-    }
-  }
-  return 0;
-}
-const released = s => s.released;
-
-/* ---------------- overview ---------------- */
-function renderOverview(){
-  const alerts = [];
-  for (const n of D.new_sets || []) alerts.push(`New set spotted on TCGplayer: <b>${esc(n.name)}</b>. Pack odds need adding before it gets a box value.`);
-  for (const s of D.sets) if (!s.released) alerts.push(`<b>${esc(s.name)}</b> releases ${new Date(s.release + "T12:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}. Box pre-orders are ${money(s.box?.market ?? s.box?.low)}, against an MSRP of ${money(s.msrp_box)}.`);
-  $("#alerts").innerHTML = alerts.map(a => `<div class="alert">${a}</div>`).join("");
-
-  const rows = D.sets.filter(s => s.ev);
-  $("#ov-table").innerHTML = `<thead><tr><th>Set</th><th class="num">Box price</th><th class="num hide-sm">vs MSRP</th>
-    <th class="num">Average value inside</th><th class="num">You'd pocket (average)</th><th class="num">Typical box (pocket)</th>
-    <th class="num">Chance it pays for itself</th><th>Open or hold?</th></tr></thead><tbody>` +
-    rows.map(s => {
-      const b = s.box || {}, e = s.ev, sim = s.sim.net;
-      const beat = sim.beat_market;
-      const openWins = s.open_vs_hold.sell_sealed_net != null && e.box_net >= s.open_vs_hold.sell_sealed_net;
-      return `<tr><td><a href="#" data-set="${s.code}"><b>${esc(s.name)}</b></a><div class="muted small">${s.code} · ${s.release}</div></td>
-      <td class="num">${money(b.market)}</td><td class="num hide-sm">${pct(b.vs_msrp)}</td>
-      <td class="num">${money(e.box_sticker)}</td><td class="num"><b>${money(e.box_net)}</b></td><td class="num">${money(sim.median)}</td>
-      <td class="num">${beat == null ? "—" : Math.round(beat * 100) + "%"}</td>
-      <td>${openWins ? '<span class="pill good">Open</span>' : '<span class="pill info">Hold sealed</span>'}</td></tr>`;
-    }).join("") + "</tbody>";
-  $("#ov-cards").innerHTML = rows.map(s => {
-    const b = s.box || {}, e = s.ev, sim = s.sim.net;
-    const openWins = s.open_vs_hold.sell_sealed_net != null && e.box_net >= s.open_vs_hold.sell_sealed_net;
-    return `<a class="card ov-card" href="#" data-set="${s.code}"><div class="ov-head"><b>${esc(s.name)}</b>${openWins ? '<span class="pill good">Open</span>' : '<span class="pill info">Hold sealed</span>'}</div>
-      <dl><dt>Box price</dt><dd>${money(b.market)} <span class="muted small">${pct(b.vs_msrp)} vs MSRP</span></dd>
-      <dt>Average value inside</dt><dd>${money(e.box_sticker)}</dd><dt>You'd pocket (average)</dt><dd><b>${money(e.box_net)}</b></dd>
-      <dt>Typical box (pocket)</dt><dd>${money(sim.median)}</dd><dt>Chance it pays for itself</dt><dd>${sim.beat_market == null ? "—" : Math.round(sim.beat_market * 100) + "%"}</dd></dl></a>`;
-  }).join("");
-  document.querySelectorAll("#ov-table [data-set], #ov-cards [data-set]").forEach(a => a.onclick = ev => {ev.preventDefault(); currentSet = a.dataset.set; showTab("set");});
-
-  const p = palette();
-  chart("ov-chart", {type:"bar", data:{labels: rows.map(s => s.name), datasets:[
-    {label:"Box price today", data: rows.map(s => s.box?.market), backgroundColor:p[0]},
-    {label:"Average value inside", data: rows.map(s => s.ev.box_sticker), backgroundColor:p[1]},
-    {label:"You'd pocket (average)", data: rows.map(s => s.ev.box_net), backgroundColor:p[2]},
-    {label:"Typical box (pocket)", data: rows.map(s => s.sim.net.median), backgroundColor:p[3]},
-  ]}, options:{scales:{y:{ticks:{callback:v => "$" + v}}}, plugins:{tooltip:{callbacks:{label:c => `${c.dataset.label}: ${money(c.raw)}`}}}}});
-}
-
-/* ---------------- set detail ---------------- */
-function renderSet(){
-  const sets = D.sets;
-  if (!currentSet) currentSet = store.get("set") || (sets.filter(s => s.ev).slice(-1)[0] || sets[0]).code;
-  store.set("set", currentSet);
-  $("#set-picker").innerHTML = sets.map(s => `<button data-code="${s.code}" class="${s.code === currentSet ? "on" : ""}">${esc(s.name)}</button>`).join("");
-  document.querySelectorAll("#set-picker button").forEach(b => b.onclick = () => {currentSet = b.dataset.code; renderSet();});
-  const s = sets.find(x => x.code === currentSet) || sets[0];
-  const body = $("#set-body");
-  const b = s.box || {};
-  if (!s.ev){
-    body.innerHTML = `<h2>${esc(s.name)}</h2><p class="lead">${esc(s.note || "")}</p>${sealedMini(s)}`;
-    return;
-  }
-  const savedPaid = parseFloat(store.get("paid-" + s.code));
-  const paid0 = !isNaN(savedPaid) ? savedPaid : (b.market || s.msrp_box);
-  body.innerHTML = `
-    <h2>${esc(s.name)} <span class="muted small">${s.code} · released ${s.release}</span></h2>
-    <div class="paid"><label for="paid"><b>What I paid for a box</b></label> <input id="paid" type="number" min="1" step="1" value="${paid0.toFixed(2)}">
-      <button class="ghost" id="paid-mkt">Market ${money(b.market)}</button><button class="ghost" id="paid-msrp">MSRP ${money(s.msrp_box)}</button></div>
-    <div class="cards" id="set-cards"></div>
-    <div class="verdict" id="set-verdict"></div>
-    <h3>What a box is worth, out of 10,000 simulated boxes</h3>
-    <p class="lead">Each point is one simulated box, sorted from worst to best. The flat line is what you paid. Boxes above the line paid for themselves.</p>
-    <div class="chart-box"><canvas id="dist-chart"></canvas></div>
-    <div class="grid2">
-      <div><h3>Where the value comes from (per box)</h3><div class="table-scroll"><table class="data">${contribTable(s)}</table></div></div>
-      <div><h3>How often you hit (per box)</h3><div class="table-scroll"><table class="data">${hitTable(s)}</table></div></div>
-    </div>
-    <h3>Chase cards</h3>
-    <div class="table-scroll"><table class="data">${chaseTable(s)}</table></div>
-    ${s.ev_series && s.ev_series.length > 1 ? `<h3>Box value over time</h3><div class="chart-box"><canvas id="evh-chart"></canvas></div>` : `<p class="muted small">Value history starts building from the first daily update.</p>`}
-    <h3>Sealed ${esc(s.name)} products</h3>${sealedMini(s)}
-    <h3>Pack odds used</h3>
-    <div class="table-scroll"><table class="data"><thead><tr><th>What</th><th>Rate</th><th>Source</th></tr></thead><tbody>
-      ${s.odds.map(o => `<tr><td>${esc(o.what)}${o.in_set === false ? ' <span class="muted small">(none in this set)</span>' : ""}</td><td>${esc(o.rate || "")}</td><td>${SOURCE_PILL[o.source] || esc(o.source)}</td></tr>`).join("")}
-    </tbody></table></div>
-    <p class="muted small">Cards in this set's pack math: ${Object.entries(s.card_counts).map(([k,v]) => `${v} ${esc(k.toLowerCase())}`).join(", ")}.</p>`;
-  const update = () => {
-    const paid = parseFloat($("#paid").value) || b.market || s.msrp_box;
-    store.set("paid-" + s.code, String(paid));
-    const e = s.ev, n = s.sim.net, st = s.sim.sticker;
-    const beatNet = shareAtLeast(n.quantiles, paid), beatSt = shareAtLeast(st.quantiles, paid);
-    const sellNet = s.open_vs_hold.sell_sealed_net;
-    $("#set-cards").innerHTML = [
-      ["Average value inside", money(e.box_sticker), `At market prices. Return ${pct(e.box_sticker / paid - 1)}`],
-      ["You'd pocket (average)", money(e.box_net), `After fees, shipping and bulk. Return ${pct(e.box_net / paid - 1)}`],
-      ["Typical box (pocket)", money(n.median), `Half of boxes do better, half worse`],
-      ["Chance it pays for itself", Math.round(beatNet * 100) + "%", `${Math.round(beatSt * 100)}% before selling costs`],
-      ["Bad box / great box", `${money(n.p10)} / ${money(n.p90)}`, "1 in 10 boxes is worse than the first, 1 in 10 better than the second"],
-      ["Sell it sealed instead", money(sellNet), `Today's market, after fees and shipping. ${pct(sellNet / paid - 1)} on what you paid`],
-    ].map(([k, v, h]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="h">${h}</div></div>`).join("");
-    const gap = e.box_net - paid;
-    $("#set-verdict").innerHTML = `<b>${esc(s.open_vs_hold.verdict)}</b> At ${money(paid)}, an average box ${gap >= 0 ? "makes" : "loses"} about ${money(Math.abs(gap))} once you sell the cards, and ${Math.round(beatNet * 100)} in 100 boxes come out ahead.`;
-    const p = palette();
-    const xs = n.quantiles.map((_, i) => i / 2);
-    chart("dist-chart", {type:"line", data:{labels: xs, datasets:[
-      {label:"You'd pocket", data:n.quantiles, borderColor:p[0], backgroundColor:p[0], pointRadius:0, borderWidth:2, tension:.2},
-      {label:"Market value", data:st.quantiles, borderColor:p[1], backgroundColor:p[1], pointRadius:0, borderWidth:1.5, borderDash:[4,3], tension:.2},
-      {label:"What you paid", data:xs.map(() => paid), borderColor:p[3], backgroundColor:p[3], pointRadius:0, borderWidth:1.5},
-    ]}, options:{scales:{x:{title:{display:true, text:"Boxes, worst to best (percent)"}, ticks:{callback:(v,i) => i % 20 === 0 ? xs[i] + "%" : ""}},
-      y:{type:"logarithmic", ticks:{callback:v => [10,20,50,100,200,500,1000,2000,5000].includes(v) ? "$" + v : ""}}},
-      plugins:{tooltip:{callbacks:{title:c => `${c[0].label}% of boxes are worse`, label:c => `${c.dataset.label}: ${money(c.raw)}`}}}}});
-  };
-  $("#paid").oninput = update;
-  $("#paid-mkt").onclick = () => {$("#paid").value = (b.market || 0).toFixed(2); update();};
-  $("#paid-msrp").onclick = () => {$("#paid").value = s.msrp_box.toFixed(2); update();};
-  update();
-  if (s.ev_series && s.ev_series.length > 1){
-    const p = palette();
-    chart("evh-chart", {type:"line", data:{labels:s.ev_series.map(r => r[0]), datasets:[
-      {label:"Box price", data:s.ev_series.map(r => r[3]), borderColor:p[0], pointRadius:0, borderWidth:2, spanGaps:true},
-      {label:"Average value inside", data:s.ev_series.map(r => r[1]), borderColor:p[1], pointRadius:0, borderWidth:2},
-      {label:"You'd pocket", data:s.ev_series.map(r => r[2]), borderColor:p[2], pointRadius:0, borderWidth:2},
-    ]}, options:{scales:{x:{ticks:{maxTicksLimit:8}}, y:{ticks:{callback:v => "$" + v}}}, plugins:{tooltip:{callbacks:{label:c => `${c.dataset.label}: ${money(c.raw)}`}}}}});
-  }
-}
-function contribTable(s){
-  const max = Math.max(...s.contrib.map(c => c.box_sticker));
-  return `<thead><tr><th>Cards</th><th class="num">Market</th><th class="num">Pocket</th><th></th></tr></thead><tbody>` +
-    s.contrib.map(c => `<tr><td>${esc(c.label)}</td><td class="num">${money(c.box_sticker)}</td><td class="num">${money(c.box_net)}</td>
-      <td style="width:30%"><div class="bar" style="width:${(c.box_sticker / max * 100).toFixed(1)}%"></div></td></tr>`).join("") + "</tbody>";
-}
-function hitTable(s){
-  return `<thead><tr><th>Hit</th><th class="num">Per box</th><th class="num">Chance in a box</th><th class="num">About</th></tr></thead><tbody>` +
-    s.hit_odds.map(h => `<tr><td>${esc(h.label)}</td><td class="num">${h.per_box.toFixed(h.per_box < 1 ? 2 : 1)}</td>
-      <td class="num">${Math.round(h.chance_in_box * 100)}%</td><td class="num">${h.per_box >= 1 ? `${h.per_box.toFixed(1)} per box` : oneIn(h.boxes_per_hit)}</td></tr>`).join("") + "</tbody>";
-}
-function chaseTable(s){
-  return `<thead><tr><th></th><th>Card</th><th>Kind</th><th class="num">Price</th><th class="num">Odds for this exact card</th></tr></thead><tbody>` +
-    s.chase.map(c => `<tr><td>${thumb(c)}</td>
-      <td><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a> <span class="muted small">${esc(c.number || "")}</span>
-      ${c.thin ? ' <span class="pill warn" title="Few recent sales or a wide gap between listings and sales">thin market</span>' : ""}</td>
-      <td>${esc(c.label)}</td><td class="num">${money(c.price)}</td><td class="num">${oneIn(c.boxes_per_hit)}</td></tr>`).join("") + "</tbody>";
-}
-function sealedMini(s){
-  const rows = [["Booster box", s.box], ["Case (6 boxes)", s.case], ["Booster pack", s.pack]].filter(r => r[1]);
-  if (!rows.length) return '<p class="muted">No sealed prices yet.</p>';
-  return `<div class="table-scroll"><table class="data"><thead><tr><th>Product</th><th class="num">Market</th><th class="num">MSRP</th><th class="num">vs MSRP</th><th class="num hide-sm">Per year</th><th class="num">30 days</th></tr></thead><tbody>` +
-    rows.map(([k, p]) => `<tr><td><a href="${esc(p.url)}" target="_blank" rel="noopener">${k}</a>${p.presale ? ' <span class="pill info">pre-order</span>' : ""}</td>
-      <td class="num">${money(p.market ?? p.low)}</td><td class="num">${money(p.msrp)}</td><td class="num">${pct(p.vs_msrp)}</td>
-      <td class="num hide-sm">${p.annualized == null ? '<span class="muted">too new</span>' : pct(p.annualized)}</td><td class="num">${chg(p.change_30d)}</td></tr>`).join("") + "</tbody></table></div>";
-}
-
-/* ---------------- sealed ---------------- */
-function renderSealed(){
-  const all = $("#sealed-all").checked;
-  const rows = D.sealed.filter(r => all || ["box", "case", "pack"].includes(r.kind));
-  $("#sealed-table").innerHTML = `<thead><tr><th>Product</th><th class="num">Market</th><th class="num">Lowest listing</th><th class="num">MSRP</th>
-    <th class="num">vs MSRP</th><th class="num">Per year</th><th class="num">If sold</th><th class="num">7 days</th><th class="num">30 days</th></tr></thead><tbody>` +
-    rows.map(r => `<tr><td><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>${r.presale ? ' <span class="pill info">pre-order</span>' : ""}</td>
-      <td class="num">${money(r.market)}</td><td class="num">${money(r.low)}</td><td class="num">${money(r.msrp)}</td><td class="num">${pct(r.vs_msrp)}</td>
-      <td class="num">${r.annualized == null ? (r.msrp ? '<span class="muted">too new</span>' : "—") : pct(r.annualized)}</td>
-      <td class="num">${r.net_if_sold == null ? "—" : money(r.net_if_sold)}</td><td class="num">${chg(r.change_7d)}</td><td class="num">${chg(r.change_30d)}</td></tr>`).join("") + "</tbody>";
-  const boxes = D.sets.filter(s => s.box && s.box.series && s.box.series.length);
-  const dates = [...new Set(boxes.flatMap(s => s.box.series.map(r => r[0])))].sort();
-  const p = palette();
-  chart("sealed-chart", {type:"line", data:{labels:dates, datasets: boxes.map((s, i) => {
-    const m = Object.fromEntries(s.box.series);
-    return {label:`${s.name} box`, data:dates.map(d => m[d] ?? null), borderColor:p[i % p.length], backgroundColor:p[i % p.length], pointRadius:dates.length < 3 ? 4 : 0, borderWidth:2, spanGaps:true};
-  })}, options:{scales:{x:{ticks:{maxTicksLimit:8}}, y:{ticks:{callback:v => "$" + v}}}, plugins:{tooltip:{callbacks:{label:c => `${c.dataset.label}: ${money(c.raw)}`}}}}});
-}
-$("#sealed-all").onchange = renderSealed;
-
-/* ---------------- cards ---------------- */
-function renderCardsFilters(){
-  const sets = [...new Set(CARDS.map(c => c.set))];
-  const names = Object.fromEntries(D.sets.map(s => [s.code, s.name]));
-  $("#card-set").innerHTML = `<option value="">All sets</option>` + sets.map(s => `<option value="${s}">${esc(names[s] || s)}</option>`).join("");
-  const kinds = [...new Set(CARDS.map(c => c.kind))].filter(Boolean);
-  $("#card-kind").innerHTML = `<option value="">All kinds</option>` + kinds.map(k => `<option>${esc(k)}</option>`).join("");
-  ["#q", "#card-set", "#card-kind", "#card-sort"].forEach(id => $(id).oninput = renderCards);
-}
-const best = c => Math.max(c.normal?.market || 0, c.foil?.market || 0, (!c.normal?.market && !c.foil?.market) ? (c.normal?.low || c.foil?.low || 0) : 0);
-const bestD7 = c => (c.foil?.market || 0) > (c.normal?.market || 0) ? c.foil?.d7 : c.normal?.d7;
-function renderCards(){
-  const q = $("#q").value.trim().toLowerCase(), set = $("#card-set").value, kind = $("#card-kind").value, sort = $("#card-sort").value;
-  let rows = CARDS.filter(c => (!q || c.name.toLowerCase().includes(q)) && (!set || c.set === set) && (!kind || c.kind === kind));
-  const sorters = {price:(a, b) => best(b) - best(a), name:(a, b) => a.name.localeCompare(b.name),
-    d7:(a, b) => (bestD7(b) ?? -1e9) - (bestD7(a) ?? -1e9), d7down:(a, b) => (bestD7(a) ?? 1e9) - (bestD7(b) ?? 1e9)};
-  rows.sort(sorters[sort]);
-  const total = rows.length; rows = rows.slice(0, 200);
-  $("#card-table").innerHTML = `<thead><tr><th></th><th>Card</th><th class="hide-sm">Set</th><th class="num">Normal</th><th class="num">Foil</th><th class="num">7 days</th><th class="num hide-sm">30 days</th><th class="num">Pull odds</th></tr></thead><tbody>` +
-    rows.map(c => `<tr><td>${thumb(c)}</td>
-      <td><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a><div class="muted small">${esc(c.kind)} · ${esc(c.number || "")}${c.thin ? ' · <span class="pill warn">thin market</span>' : ""}</div></td>
-      <td class="hide-sm">${esc(c.set)}</td><td class="num">${money(c.normal?.market ?? c.normal?.low)}</td><td class="num">${money(c.foil?.market ?? c.foil?.low)}</td>
-      <td class="num">${chg(bestD7(c))}</td><td class="num hide-sm">${chg((c.foil?.market || 0) > (c.normal?.market || 0) ? c.foil?.d30 : c.normal?.d30)}</td>
-      <td class="num">${c.boxes_per_hit ? oneIn(c.boxes_per_hit) : '<span class="muted">not in packs</span>'}</td></tr>`).join("") + "</tbody>";
-  $("#card-count").textContent = total > 200 ? `Showing 200 of ${total}. Narrow the search to see more.` : `${total} cards`;
-}
-
-/* ---------------- movers ---------------- */
-function renderMovers(){
-  const m = D.movers;
-  const list = (title, rows, key) => `<div><h3>${title}</h3><div class="table-scroll"><table class="data"><tbody>` +
-    (rows.length ? rows.slice(0, 10).map(r => `<tr><td><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a><div class="muted small">${esc(r.set)} · ${esc(r.printing)}</div></td>
-      <td class="num">${money(r.price)}</td><td class="num">${chg(r[key])}</td></tr>`).join("") : `<tr><td class="muted">Needs more price history. This fills in after a few daily updates.</td></tr>`) + "</tbody></table></div></div>";
-  $("#movers-body").innerHTML = list("Up since yesterday", m.up_1d, "d1") + list("Down since yesterday", m.down_1d, "d1") +
-    list("Up this week", m.up_7d, "d7") + list("Down this week", m.down_7d, "d7");
-}
-
-/* ---------------- how ---------------- */
-function renderHow(){
-  const s = D.selling;
-  $("#how-body").innerHTML = `
-  <p><b>Prices.</b> Every day this page pulls TCGplayer's prices through tcgcsv.com. "Market" is TCGplayer's market price, based on recent sales. When a card has no recent sales, the cheapest listing is used instead. Cards marked <span class="pill warn">thin market</span> have no recent sale price, or listings far from the sale price, so treat their price as rough.</p>
-  <p><b>What's in a pack.</b> 14 cards: 7 commons, 3 uncommons, 2 rare-or-better, 1 foil of any rarity, and 1 rune or token. About 1 pack in 4 has an Epic. Alternate arts, Overnumbered, Signature and Ultimate cards take the foil card's place when they show up. Each set's detail page lists every rate used and where it came from: <span class="pill good">Riot</span> means Riot published it, <span class="pill warn">Community estimate</span> means it comes from fans counting their box openings, and <span class="pill bad">Our assumption</span> means nobody has good data yet. Within a rarity, every card is treated as equally likely.</p>
-  <p><b>Average value inside.</b> The cards you'd get per box, on average, at market prices. Rare hits like Signatures add a lot to the average even though most boxes never see one.</p>
-  <p><b>You'd pocket.</b> What you'd get after actually selling: TCGplayer keeps about ${(s.fee_pct * 100).toFixed(2)}% of each sale, and each card shipped costs about ${money(s.per_card_cost)} in order fee, envelope, stamp and toploader. Cards under ${money(s.sell_threshold)} aren't worth listing on their own, so they count as bulk at ${money(s.bulk_value)} each.</p>
-  <p><b>Typical box and chance it pays for itself.</b> The page opens 10,000 virtual boxes using the odds above. The typical box is the middle one: half of boxes do better and half do worse. The chance it pays for itself is the share of those boxes worth at least what you paid, after selling costs.</p>
-  <p><b>Sealed.</b> "vs MSRP" compares today's price with the $${D.sets[0]?.msrp_box ?? 120} retail price. "Per year" turns that into a yearly growth rate, like an interest rate, once a set has been out 90 days. "If sold" takes off ${(s.sealed_fee_pct * 100).toFixed(2)}% fees and ${money(s.sealed_ship_cost)} shipping.</p>
-  <p><b>What this leaves out.</b> Sales tax on what you buy, your time listing cards, card condition (everything is priced as near mint), and the fact that selling a lot of one card at once pushes its price down. Collectibles profits are taxed at up to 28% when held over a year, and TCGplayer and eBay report sales to the IRS on a 1099-K.</p>
-  <p class="muted small">Built ${esc(D.generated_at)}. Version ${esc(D.version)}. ${D.history_days} days of price history.</p>`;
-}
-
-function renderAll(){
-  renderOverview(); renderMovers(); renderHow(); renderCards();
-  if ($("#set").classList.contains("on")) renderSet();
-  if ($("#sealed").classList.contains("on")) renderSealed();
-}
-
-Promise.all([fetch("data/latest.json").then(r => r.json()), fetch("data/cards.json").then(r => r.json())]).then(([d, c]) => {
-  D = d; CARDS = c;
-  const date = new Date(D.price_date + "T12:00").toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric", year:"numeric"});
-  $("#stamp").textContent = `TCGplayer prices from ${date} · updates daily`;
-  renderCardsFilters(); renderAll();
-  showTab(store.get("tab") || "overview");
-}).catch(e => { $("#stamp").textContent = "Couldn't load price data. Try refreshing."; console.error(e); });
+/* ---------------- start ---------------- */
+getJSON("data/games.json").then(idx => {
+  S.games = idx.games;
+  addEventListener("hashchange", render);
+  render();
+}).catch(e => { console.error(e); $("#view").innerHTML = '<p class="pad muted">Couldn\'t load the price data. Try refreshing.</p>'; });

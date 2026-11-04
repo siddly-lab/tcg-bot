@@ -1,5 +1,5 @@
 name: daily
-# Pulls today's prices, saves them to the history, rebuilds the dashboard and publishes it.
+# Pulls today's prices for every game, saves them to the history, rebuilds the dashboard and publishes it.
 on:
   schedule:
     - cron: "25 21 * * *"   # tcgcsv refreshes around 20:00 UTC (1pm Pacific)
@@ -24,9 +24,8 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install -r requirements.txt
-      - name: Fill any gaps in the price history (only missing days are downloaded)
-        run: pip install py7zr && python -m tcg.backfill
-      - run: python -m tcg.build
+      - name: Pull prices, fill any history gaps, build the dashboard data
+        run: python -m tcg.build
       - name: Save today's prices to the history
         run: |
           git config user.name "tcg-bot"

@@ -1,87 +1,70 @@
-"""Expected value of packs, boxes and cases, plus a simulation of opening many boxes."""
+"""Expected value of packs, boxes and cases, plus a simulation of opening many boxes.
+
+A pack template is a list of slots. Each slot has a count, a printing and bucket weights. A slot
+with `upgrades` can be replaced, at the stated per-pack chance, by a rarer card (alternate art,
+Special Illustration Rare...). A bucket with no cards in a set gives its share back to the slot.
+"""
 from __future__ import annotations
 
-import copy
 import hashlib
 
 import numpy as np
 
-SPECIALS = ("AltArt", "Overnumbered", "Signature", "Ultimate")
 
-
-def price_of(card: dict, printing: str) -> float:
-    """Market price of the printing a pack gives, falling back to the other printing, then the lowest listing."""
+def price_sub(card: dict, printing: str | None) -> tuple[float, str | None]:
+    """Market price of a printing, falling back to another printing, then to the cheapest listing."""
     pr = card.get("prices") or {}
-    other = "Foil" if printing == "Normal" else "Normal"
-    for sub in (printing, other):
+    order = ([printing] if printing in pr else []) + sorted((s for s in pr if s != printing), key=lambda s: -(pr[s].get("market") or 0))
+    for sub in order:
         v = (pr.get(sub) or {}).get("market")
         if v:
-            return float(v)
-    for sub in (printing, other):
+            return float(v), sub
+    for sub in order:
         v = (pr.get(sub) or {}).get("low")
         if v:
-            return float(v)
-    return 0.0
+            return float(v), sub
+    return 0.0, None
+
+
+def price_of(card: dict, printing: str | None) -> float:
+    return price_sub(card, printing)[0]
 
 
 def net_value(price: float, selling: dict) -> float:
-    """What you'd actually pocket: after TCGplayer fees and shipping supplies, or bulk value if it isn't worth listing."""
+    """What you'd actually pocket: after fees and shipping supplies, or bulk value if it isn't worth listing."""
     bulk = selling["bulk_value"]
     if price < selling["sell_threshold"]:
         return min(price, bulk) if price > 0 else 0.0
     return max(bulk, price * (1 - selling["fee_pct"]) - selling["per_card_cost"])
 
 
-def merged_pack(default_pack: dict, set_cfg: dict) -> dict:
-    pack = copy.deepcopy(default_pack)
-    for k, v in (set_cfg.get("pack") or {}).items():
-        pack[k] = v
-    if set_cfg.get("rare_printing"):
-        for s in pack["slots"]:
-            if s["name"].startswith("Rare"):
-                s["printing"] = set_cfg["rare_printing"]
-    for k, v in (set_cfg.get("specials") or {}).items():
-        pack["specials"].setdefault(k, {}).update(v)
-    return pack
-
-
-def build_slots(pack: dict, bucket_sizes: dict[str, int]) -> list[dict]:
-    """Final slot list: each slot has count, printing and bucket weights that sum to 1.
-
-    Specials (alt art, overnumbered, signature, ultimate) replace the foil-slot card.
-    Riot's overnumbered rate includes signatures, so the plain overnumbered share is the difference.
-    A bucket with no cards in this set gives its share back to the rest of its slot.
-    """
-    sp = {k: float(v.get("per_pack", 0)) for k, v in pack["specials"].items() if not k.startswith("_")}
-    if "Overnumbered" in sp and "Signature" in sp:
-        sp["Overnumbered"] = max(0.0, sp["Overnumbered"] - sp["Signature"])
+def build_slots(template: dict, bucket_sizes: dict[str, int], printing_overrides: dict | None = None) -> list[dict]:
     slots = []
-    for s in pack["slots"]:
-        w = dict(s["weights"])
-        printing = s.get("printing", "Normal")
-        if s["name"] == "Foil":
-            special_total = sum(p for k, p in sp.items() if bucket_sizes.get(k))
-            w = {k: v * (1 - special_total) for k, v in w.items()}
-            for k, p in sp.items():
-                if bucket_sizes.get(k):
-                    w[k] = p
-        w = {k: v for k, v in w.items() if v > 0 and bucket_sizes.get(k)}
-        tot = sum(w.values())
-        if tot <= 0:
+    for s in template["slots"]:
+        ups = {k: float(v) for k, v in (s.get("upgrades") or {}).items() if bucket_sizes.get(k)}
+        up_total = sum(ups.values())
+        w = {k: v * (1 - up_total) for k, v in s["weights"].items() if v > 0 and bucket_sizes.get(k)}
+        base_tot = sum(w.values())
+        if base_tot <= 0 and not ups:
             continue
+        if base_tot > 0:  # rescale the base cards so the slot still sums to one
+            w = {k: v / base_tot * (1 - up_total) for k, v in w.items()}
+        w.update(ups)
+        tot = sum(w.values())
+        printing = (printing_overrides or {}).get(s["name"], s.get("printing", "Normal"))
         slots.append({"name": s["name"], "count": int(s["count"]), "printing": printing,
-                      "weights": {k: v / tot for k, v in w.items()}})
+                      "weights": {k: v / tot for k, v in w.items()}, "upgrades": list(ups)})
     return slots
 
 
-def slot_values(slots, buckets, selling):
+def slot_values(slots, buckets, selling, bucket_printing=None):
     """Per slot and bucket: arrays of sticker and net value for each card in the bucket."""
     out = []
     for s in slots:
         vals = {}
         for b in s["weights"]:
-            pr = "Foil" if b in SPECIALS else s["printing"]
-            sticker = np.array([price_of(c, pr) for c in buckets[b]], dtype=float)
+            pr = (bucket_printing or {}).get(b) if b in s.get("upgrades", []) else s["printing"]
+            sticker = np.array([price_of(c, pr or s["printing"]) for c in buckets[b]], dtype=float)
             net = np.array([net_value(x, selling) for x in sticker], dtype=float)
             vals[b] = (sticker, net)
         out.append(vals)
@@ -89,7 +72,6 @@ def slot_values(slots, buckets, selling):
 
 
 def expected(slots, values) -> dict:
-    """Average value per pack, and how much each bucket contributes."""
     contrib_s, contrib_n = {}, {}
     for s, vals in zip(slots, values):
         for b, w in s["weights"].items():
@@ -101,7 +83,6 @@ def expected(slots, values) -> dict:
 
 
 def card_odds_per_pack(slots, buckets) -> dict[int, float]:
-    """Chance a given card shows up in one pack (any slot)."""
     odds: dict[int, float] = {}
     for s in slots:
         for b, w in s["weights"].items():
@@ -116,7 +97,6 @@ def per_box(p_pack: float, packs: int) -> float:
 
 
 def simulate(slots, values, packs_per_box: int, boxes: int = 10000, seed: str = "x") -> dict:
-    """Open `boxes` virtual boxes. Returns the sticker and net value of each box."""
     rng = np.random.default_rng(int(hashlib.sha256(seed.encode()).hexdigest()[:8], 16))
     sticker = np.zeros(boxes)
     net = np.zeros(boxes)
@@ -124,8 +104,7 @@ def simulate(slots, values, packs_per_box: int, boxes: int = 10000, seed: str = 
         keys = list(s["weights"])
         probs = np.array([s["weights"][k] for k in keys])
         probs = probs / probs.sum()
-        n = packs_per_box * s["count"]
-        choice = rng.choice(len(keys), size=(boxes, n), p=probs)
+        choice = rng.choice(len(keys), size=(boxes, packs_per_box * s["count"]), p=probs)
         for i, k in enumerate(keys):
             st, nt = vals[k]
             mask = choice == i
@@ -145,12 +124,9 @@ def summarize_sim(sim: dict, box_market: float | None, msrp: float | None) -> di
     for k in ("sticker", "net"):
         a = sim[k]
         out[k] = {
-            "mean": round(float(a.mean()), 2),
-            "median": round(float(np.median(a)), 2),
-            "p10": round(float(np.percentile(a, 10)), 2),
-            "p25": round(float(np.percentile(a, 25)), 2),
-            "p75": round(float(np.percentile(a, 75)), 2),
-            "p90": round(float(np.percentile(a, 90)), 2),
+            "mean": round(float(a.mean()), 2), "median": round(float(np.median(a)), 2),
+            "p10": round(float(np.percentile(a, 10)), 2), "p25": round(float(np.percentile(a, 25)), 2),
+            "p75": round(float(np.percentile(a, 75)), 2), "p90": round(float(np.percentile(a, 90)), 2),
             "p99": round(float(np.percentile(a, 99)), 2),
             "quantiles": [round(float(x), 2) for x in np.percentile(a, qs)],
             "beat_market": round(float((a >= box_market).mean()), 4) if box_market else None,

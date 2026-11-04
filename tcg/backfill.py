@@ -1,13 +1,10 @@
-"""One-time backfill of price history from tcgcsv's daily archives.
+"""Fill gaps in each game's price history from tcgcsv's daily archives.
 
-Each archive holds every game's prices for one day (prices-YYYY-MM-DD.ppmd.7z). We keep only
-Riftbound's and save them in the same snapshot format as the daily build.
-
-    python -m tcg.backfill --start 2025-10-24 --weekly-before-days 35
+Each archive (prices-YYYY-MM-DD.ppmd.7z) holds every game's prices for one day, so one download
+serves every game that's missing that day. Older history is kept weekly, the last 35 days daily.
 """
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import json
 import shutil
@@ -20,8 +17,6 @@ from pathlib import Path
 from . import history, tcgcsv
 
 ARCHIVE = "https://tcgcsv.com/archive/tcgplayer/prices-{d}.ppmd.7z"
-
-
 PAUSE = 3
 
 
@@ -52,56 +47,55 @@ def dates_to_fetch(start: dt.date, end: dt.date, recent_days: int, have: set[str
     return out
 
 
-def snapshot_from_archive(path: Path, cat: int, workdir: Path) -> dict[str, list]:
+def read_archive(path: Path, cats: set[int], workdir: Path) -> dict[int, list[dict]]:
     import py7zr  # only needed here
 
     with py7zr.SevenZipFile(path, "r") as z:
-        names = [n for n in z.getnames() if f"/{cat}/" in n and n.endswith("prices")]
+        names = [n for n in z.getnames() if n.endswith("prices") and any(f"/{c}/" in n for c in cats)]
         z.extract(path=workdir, targets=names)
-    snap = {}
+    out: dict[int, list[dict]] = {c: [] for c in cats}
     for n in names:
+        cat = next(c for c in cats if f"/{c}/" in n)
         try:
             data = json.loads((workdir / n).read_text())
         except Exception:
             continue
         rows = data.get("results", data) if isinstance(data, dict) else data
-        for p in rows:
-            m, low = p.get("marketPrice"), p.get("lowPrice")
-            if m is not None or low is not None:
-                snap[history.key(p["productId"], p.get("subTypeName") or "Normal")] = [m, low]
-    return snap
+        out[cat].extend(rows)
+    return out
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--start", default="2025-10-24")
-    ap.add_argument("--end", default=None)
-    ap.add_argument("--recent-days", type=int, default=35)
-    ap.add_argument("--out", default=str(Path(__file__).resolve().parent.parent / "data" / "history"))
-    a = ap.parse_args(argv)
-    out = Path(a.out)
-    have = {p.name[:10] for p in out.glob("*.json.gz")}
-    end = dt.date.fromisoformat(a.end) if a.end else dt.date.today() - dt.timedelta(days=1)
-    todo = dates_to_fetch(dt.date.fromisoformat(a.start), end, a.recent_days, have)
-    print(f"{len(todo)} days to fetch")
-    ok = 0
+def fill(games: list[dict], hist_root: Path, end: dt.date, recent_days: int = 35, limit: int = 200) -> int:
+    """games: [{id, category, start, keep(pid, sub, market) -> bool}]. Returns days saved."""
+    need: dict[str, list[dict]] = {}
+    for g in games:
+        folder = hist_root / g["id"]
+        have = {p.name[:10] for p in folder.glob("*.json.gz")} if folder.exists() else set()
+        for d in dates_to_fetch(dt.date.fromisoformat(g["start"]), end, recent_days, have):
+            need.setdefault(d, []).append(g)
+    todo = sorted(need)[-limit:]
+    print(f"history: {len(todo)} archive days to fetch")
+    saved = 0
     for d in todo:
         tmp = Path(tempfile.mkdtemp())
         try:
             arc = tmp / "a.7z"
             download(ARCHIVE.format(d=d), arc)
-            snap = snapshot_from_archive(arc, tcgcsv.RIFTBOUND_CATEGORY, tmp)
-            if snap:
-                history.write_snapshot(out, d, snap)
-                ok += 1
-            print(f"{d}: {len(snap)} prices ({arc.stat().st_size // 1_000_000} MB archive)", flush=True)
+            rows = read_archive(arc, {g["category"] for g in need[d]}, tmp)
+            for g in need[d]:
+                snap = {}
+                for p in rows.get(g["category"], []):
+                    m, low = p.get("marketPrice"), p.get("lowPrice")
+                    sub = p.get("subTypeName") or "Normal"
+                    if (m is not None or low is not None) and g["keep"](p["productId"], sub, m or low):
+                        snap[history.key(p["productId"], sub)] = [m, low]
+                if snap:
+                    history.write_snapshot(hist_root / g["id"], d, snap)
+                    saved += 1
+            print(f"{d}: " + ", ".join(f"{g['id']} {len(rows.get(g['category'], []))}" for g in need[d]), flush=True)
         except Exception as e:
             print(f"{d}: skipped ({e})", flush=True)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-            time.sleep(PAUSE)  # be polite: tcgcsv rate-limits bursts
-    print(f"saved {ok} days")
-
-
-if __name__ == "__main__":
-    main()
+            time.sleep(PAUSE)
+    return saved

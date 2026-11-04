@@ -1,0 +1,219 @@
+{
+  "order": 1,
+  "_readme": "Pack odds per set. 'source' says how much to trust each figure: official = Riot published it; community = estimated from fan box openings; assumed = our placeholder until better data exists. Edit here when better data comes out.",
+  "id": "riftbound",
+  "name": "Riftbound",
+  "category": 89,
+  "module": "riftbound",
+  "group_by": "year",
+  "packs": {
+    "pack": 1,
+    "box": 24,
+    "case": 144
+  },
+  "history": "all",
+  "templates": {
+    "riftbound": {
+      "packs_per_box": 24,
+      "boxes_per_case": 6,
+      "slots": [
+        {
+          "name": "Common",
+          "count": 7,
+          "printing": "Normal",
+          "weights": {
+            "Common": 1.0
+          }
+        },
+        {
+          "name": "Uncommon",
+          "count": 3,
+          "printing": "Normal",
+          "weights": {
+            "Uncommon": 1.0
+          }
+        },
+        {
+          "name": "Rare or better",
+          "count": 2,
+          "printing": "Normal",
+          "weights": {
+            "Rare": 0.875,
+            "Epic": 0.125
+          }
+        },
+        {
+          "name": "Foil",
+          "count": 1,
+          "printing": "Foil",
+          "weights": {
+            "Common": 0.55,
+            "Uncommon": 0.3,
+            "Rare": 0.12,
+            "Epic": 0.03
+          },
+          "upgrades": {
+            "AltArt": 0.0833,
+            "Overnumbered": 0.0125,
+            "Signature": 0.001389,
+            "Ultimate": 0.00025
+          }
+        },
+        {
+          "name": "Rune / token",
+          "count": 1,
+          "printing": "Normal",
+          "weights": {
+            "Rune": 0.75,
+            "Token": 0.2,
+            "RuneAlt": 0.05
+          }
+        }
+      ],
+      "hits": [
+        "Epic",
+        "AltArt",
+        "Overnumbered",
+        "Signature",
+        "Ultimate"
+      ],
+      "odds_notes": [
+        {
+          "what": "Epic",
+          "rate": "About 1 Epic per 4 packs",
+          "source": "official"
+        },
+        {
+          "what": "Alternate arts",
+          "rate": "About 1 in 12 packs (about 2 per box)",
+          "source": "community"
+        },
+        {
+          "what": "Overnumbered (incl. Signatures)",
+          "rate": "About 1 per 3 boxes",
+          "source": "official"
+        },
+        {
+          "what": "Signatures",
+          "rate": "About 1 in 10 Overnumbered cards (about 1 per 30 boxes)",
+          "source": "official"
+        },
+        {
+          "what": "Ultimate",
+          "rate": "About 1 in 4,000 packs (Riot's Radiance figure, used for every set that has one)",
+          "source": "official"
+        },
+        {
+          "what": "Foil card rarity split",
+          "rate": "55% common, 30% uncommon, 12% rare, 3% epic",
+          "source": "assumed"
+        },
+        {
+          "what": "Rune / token slot",
+          "rate": "75% rune, 20% token, 5% alternate-art rune",
+          "source": "assumed"
+        }
+      ]
+    }
+  },
+  "sets": [
+    {
+      "code": "OGN",
+      "name": "Origins",
+      "match": [
+        "origins"
+      ],
+      "release": "2025-10-31",
+      "msrp": {
+        "box": 119.99,
+        "pack": 4.99,
+        "case": 719.94
+      },
+      "template": "riftbound",
+      "print_status": null
+    },
+    {
+      "code": "SFD",
+      "name": "Spiritforged",
+      "match": [
+        "spiritforged",
+        "spirit forged"
+      ],
+      "release": "2026-02-13",
+      "msrp": {
+        "box": 119.99,
+        "pack": 4.99,
+        "case": 719.94
+      },
+      "template": "riftbound",
+      "print_status": null,
+      "rare_printing": "Foil"
+    },
+    {
+      "code": "UNL",
+      "name": "Unleashed",
+      "match": [
+        "unleashed"
+      ],
+      "release": "2026-05-08",
+      "msrp": {
+        "box": 119.99,
+        "pack": 4.99,
+        "case": 719.94
+      },
+      "template": "riftbound",
+      "print_status": null,
+      "rare_printing": "Foil"
+    },
+    {
+      "code": "VEN",
+      "name": "Vendetta",
+      "match": [
+        "vendetta"
+      ],
+      "release": "2026-07-31",
+      "msrp": {
+        "box": 119.99,
+        "pack": 4.99,
+        "case": 719.94
+      },
+      "template": "riftbound",
+      "print_status": null,
+      "rare_printing": "Foil"
+    },
+    {
+      "code": "RAD",
+      "name": "Radiance",
+      "match": [
+        "radiance"
+      ],
+      "release": "2026-10-23",
+      "msrp": {
+        "box": 119.99,
+        "pack": 4.99,
+        "case": 719.94
+      },
+      "template": "riftbound",
+      "print_status": null,
+      "rare_printing": "Foil"
+    },
+    {
+      "code": "LEG",
+      "name": "Legacy",
+      "match": [
+        "legacy"
+      ],
+      "release": "2027-01-29",
+      "msrp": {
+        "box": 119.99,
+        "pack": 4.99,
+        "case": 719.94
+      },
+      "template": "riftbound",
+      "print_status": null,
+      "rare_printing": "Foil"
+    }
+  ],
+  "selling_note": "TCGplayer takes about 10.75% plus 2.5% payment processing.",
+  "history_start": "2025-10-24"
+}

@@ -1,4 +1,4 @@
-"""Sort TCGplayer products into the buckets the pack math uses.
+"""Riftbound: sort TCGplayer products into the buckets the pack math uses.
 
 Rules come from how TCGplayer names Riftbound products, checked against the live feed:
   - Sealed products have no Rarity field ("Origins - Booster Display").
@@ -25,11 +25,7 @@ LABELS = {
 RUNE_NAME = re.compile(r"^(Fury|Calm|Mind|Body|Chaos|Order) Rune\b")
 
 
-def ext(p: dict, key: str):
-    for e in p.get("extendedData") or []:
-        if e.get("name") == key:
-            return e.get("value")
-    return None
+from . import ext  # noqa: E402
 
 
 def sealed_type(name: str) -> str:
@@ -45,8 +41,42 @@ def sealed_type(name: str) -> str:
     return "other"
 
 
-SEALED_LABELS = {"box": "Booster box", "case": "Booster box case (6 boxes)", "pack": "Booster pack",
+SEALED_LABELS = {"box": "Booster box", "case": "Case (6 boxes)", "pack": "Booster pack",
                  "sleeved_pack": "Sleeved booster pack", "other": "Other sealed"}
+
+
+def is_sealed(p: dict) -> bool:
+    return ext(p, "Rarity") is None and ext(p, "Number") is None and not p.get("extendedData")
+
+
+def card_name(name: str) -> str:
+    return clean_name(name)
+
+
+def sets_from_groups(groups: list[dict], products: dict[int, list[dict]], cfg: dict) -> list[dict]:
+    """Riftbound sets are listed by hand in the config (there are few, and each needs its MSRP)."""
+    out = []
+    for g in groups:
+        n = g["name"].strip().lower()
+        for s in cfg["sets"]:
+            if n in [m.lower() for m in s["match"]] or n == s["name"].lower():
+                out.append({**s, "group_id": g["groupId"], "era": None, "modeled": True,
+                            "release": s.get("release") or (g.get("publishedOn") or "")[:10]})
+    return out
+
+
+def unknown_sets(groups, products, cfg, known_ids):
+    """Groups that sell a booster display but aren't in the config yet."""
+    out = []
+    for g in groups:
+        if g["groupId"] in known_ids:
+            continue
+        if any(is_sealed(p) and sealed_type(p["name"]) == "box" for p in products.get(g["groupId"], [])):
+            out.append({"name": g["name"], "published": g.get("publishedOn")})
+    return out
+
+
+BUCKET_PRINTING = {"AltArt": "Foil", "Overnumbered": "Foil", "Signature": "Foil", "Ultimate": "Foil"}
 
 
 def classify_card(p: dict) -> str | None:

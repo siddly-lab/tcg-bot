@@ -42,3 +42,30 @@
 ## 0.1.3
 
 - Card pictures get bigger when you point at them on a computer, and open large when tapped on a phone (tap again or press Esc to close). Uses TCGplayer's large photo when it has one.
+
+## 0.2.0 — buy timing, redesign, Pokémon
+
+**Buy timing (for collectors)**
+- Every sealed product and card is compared with its own last 90 days. Labels: "At or below MSRP", "Near its 90-day low", "In its normal range", "Above its usual price".
+- "You'd pay": cheapest listing plus 7.75% sales tax and estimated shipping, not just the market price.
+- Cheapest way to get packs: box vs case vs bundle vs ETB vs loose packs, per pack, delivered.
+- Price by days since release: every set's box lined up by age, to see where a new set sits compared with older ones at the same point.
+- Compared with other investments: what the MSRP would have earned in an S&P 500 fund or Treasury bills since release, before and after federal tax.
+- Chase cards: 90-day range and label for each, plus "buy it vs pull it" (expected net cost of opening boxes until you hit that card).
+- How much of a box's value rides on its 10 most valuable cards.
+- Print status supported per set in the config (left blank until confirmed).
+
+**Redesign**
+- New Today page: good prices on sealed, chase cards near their lows, sets worth opening, biggest sealed moves.
+- Set browser grouped by year (Riftbound) or era (Pokémon), with box art, price chart, search, and collapsible groups.
+- Set pages with a buy-timing panel, 100-box dot chart, card detail pop-up with price history.
+- Links to any view (for example `#/pokemon/set/DLR`), sortable tables, "show more" paging, phone-friendly tabs, sun/moon theme button.
+
+**Pokémon**
+- All 220 TCGplayer Pokémon groups scanned daily; every group selling boxes or packs becomes a set (about 150), grouped by era.
+- Box value for main Scarlet & Violet and Mega Evolution sets, using TCGplayer's measured pull rates (community estimates, labeled).
+- Older sets get sealed tracking, buy timing and chase-card prices, but no box value.
+- History keeps sealed products, modeled sets' cards and cards worth $20+ (about a tenth of Pokémon's 46,000 daily prices) to keep the repo small.
+
+**Discord bot**
+- Commands work across games: `/box` searches every game's sets, `/sets`, `/sealed`, `/movers` take a game. `/sealed` now lists good prices. The daily post covers every game.

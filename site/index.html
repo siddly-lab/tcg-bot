@@ -3,85 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Riftbound Box Value</title>
-<meta name="description" content="Daily Riftbound card prices, booster box value, pull odds and sealed box returns.">
+<title>TCG Box Value</title>
+<meta name="description" content="Daily trading card prices, booster box value, pull odds, buy timing and sealed returns for Riftbound and Pokémon.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <header class="top">
-  <div class="wrap top-inner">
-    <div>
-      <h1>Riftbound Box Value</h1>
-      <p class="sub" id="stamp">Loading prices…</p>
-    </div>
-    <button id="theme" class="ghost" aria-label="Toggle dark mode">◐</button>
+  <div class="wrap top-row">
+    <a class="brand" href="#/" aria-label="TCG Box Value home">
+      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="5" y="7" width="15" height="21" rx="3" fill="var(--accent)" opacity=".35" transform="rotate(-10 12 17)"/><rect x="11" y="4" width="15" height="21" rx="3" fill="var(--accent)"/><path d="M15 15l3-5 3 5-3 5z" fill="var(--on-accent)"/></svg>
+      <span>TCG Box Value</span>
+    </a>
+    <div class="game-switch" id="games" role="tablist" aria-label="Game"></div>
+    <button id="theme" class="icon-btn" aria-label="Switch light or dark mode" title="Light or dark mode">
+      <svg class="sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    </button>
   </div>
-  <nav class="wrap tabs" id="tabs">
-    <button data-tab="overview" class="on">Overview</button>
-    <button data-tab="set">Set detail</button>
-    <button data-tab="sealed">Sealed</button>
-    <button data-tab="cards">Card prices</button>
-    <button data-tab="movers">Movers</button>
-    <button data-tab="how">How it works</button>
+  <nav class="wrap tabs" id="tabs" aria-label="Sections">
+    <a data-view="today">Today</a>
+    <a data-view="sets">Sets</a>
+    <a data-view="sealed">Sealed</a>
+    <a data-view="cards">Cards</a>
+    <a data-view="movers">Movers</a>
+    <a data-view="how">How it works</a>
   </nav>
 </header>
-
-<main class="wrap">
-  <section id="overview" class="tab on">
-    <div id="alerts"></div>
-    <h2>Should you open a box?</h2>
-    <p class="lead">For each set: what a booster box costs today, what the cards inside are worth on average, and what you'd actually pocket after selling fees. Most boxes are worth less than the average, because a few rare hits pull it up.</p>
-    <div class="table-scroll ov-wide"><table id="ov-table" class="data"></table></div>
-    <div id="ov-cards" class="ov-cards"></div>
-    <h2>Opened vs sealed, per box</h2>
-    <div class="chart-box"><canvas id="ov-chart"></canvas></div>
-  </section>
-
-  <section id="set" class="tab">
-    <div class="set-picker" id="set-picker"></div>
-    <div id="set-body"></div>
-  </section>
-
-  <section id="sealed" class="tab">
-    <h2>Sealed product tracker</h2>
-    <p class="lead">Sealed box and case prices against retail price (MSRP). "Per year" is the growth rate since release, shown once a set has been out 90 days. "If sold" is after TCGplayer fees and shipping.</p>
-    <div class="chart-box tall"><canvas id="sealed-chart"></canvas></div>
-    <div class="filters"><label><input type="checkbox" id="sealed-all"> Show all sealed products (decks, bundles, kits)</label></div>
-    <div class="table-scroll"><table id="sealed-table" class="data"></table></div>
-  </section>
-
-  <section id="cards" class="tab">
-    <h2>Card prices</h2>
-    <div class="filters">
-      <input id="q" type="search" placeholder="Search a card…" autocomplete="off">
-      <select id="card-set"></select>
-      <select id="card-kind"></select>
-      <select id="card-sort">
-        <option value="price">Highest price</option>
-        <option value="d7">Biggest 7-day rise</option>
-        <option value="d7down">Biggest 7-day drop</option>
-        <option value="name">Name</option>
-      </select>
-    </div>
-    <div class="table-scroll"><table id="card-table" class="data"></table></div>
-    <p class="muted" id="card-count"></p>
-  </section>
-
-  <section id="movers" class="tab">
-    <h2>Biggest price moves</h2>
-    <p class="lead">Cards and sealed products worth $2 or more.</p>
-    <div class="grid2" id="movers-body"></div>
-  </section>
-
-  <section id="how" class="tab">
-    <h2>How the numbers work</h2>
-    <div class="prose" id="how-body"></div>
-  </section>
-</main>
-<footer class="wrap muted small">Prices from TCGplayer via tcgcsv.com, refreshed daily. Not affiliated with Riot Games or TCGplayer. Not financial advice.</footer>
+<main class="wrap" id="view" aria-live="polite"><p class="muted pad">Loading prices…</p></main>
+<footer class="wrap muted small">Prices from TCGplayer via tcgcsv.com, refreshed daily. <span id="stamp"></span> Not affiliated with Riot Games, The Pokémon Company or TCGplayer. Not financial advice.</footer>
+<div id="modal" class="modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Card details"><button class="icon-btn close" aria-label="Close">✕</button><div id="modal-body"></div></div></div>
 <script src="app.js"></script>
 </body>
 </html>
