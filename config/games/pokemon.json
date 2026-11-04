@@ -1,0 +1,288 @@
+{
+  "order": 2,
+  "_readme": "Pokemon sets are found automatically: any TCGplayer group with a booster box or pack is a set. Eras come from release dates. Box value is worked out only for main Scarlet & Violet and Mega Evolution sets, where good pack data exists.",
+  "id": "pokemon",
+  "name": "Pokémon",
+  "category": 3,
+  "module": "pokemon",
+  "group_by": "era",
+  "packs": {
+    "pack": 1,
+    "sleeved_pack": 1,
+    "bundle": 6,
+    "etb": 9,
+    "box": 36,
+    "case": 216
+  },
+  "history": "scoped",
+  "history_card_min": 20,
+  "eras": [
+    {
+      "name": "Mega Evolution",
+      "from": "2025-09-01",
+      "template": "mega",
+      "msrp": {
+        "pack": 4.49,
+        "bundle": 26.94,
+        "etb": 49.99,
+        "box": 161.64,
+        "case": 969.84
+      }
+    },
+    {
+      "name": "Scarlet & Violet",
+      "from": "2023-03-01",
+      "template": "sv",
+      "msrp": {
+        "pack": 4.49,
+        "bundle": 26.94,
+        "etb": 49.99,
+        "box": 161.64,
+        "case": 969.84
+      }
+    },
+    {
+      "name": "Sword & Shield",
+      "from": "2019-11-01"
+    },
+    {
+      "name": "Sun & Moon",
+      "from": "2017-02-01"
+    },
+    {
+      "name": "XY",
+      "from": "2013-12-01"
+    },
+    {
+      "name": "Black & White",
+      "from": "2011-04-01"
+    },
+    {
+      "name": "HeartGold SoulSilver",
+      "from": "2010-02-01"
+    },
+    {
+      "name": "Diamond & Pearl / Platinum",
+      "from": "2007-05-01"
+    },
+    {
+      "name": "EX",
+      "from": "2003-06-01"
+    },
+    {
+      "name": "Wizards of the Coast",
+      "from": "1999-01-01"
+    }
+  ],
+  "modeled_set_pattern": "^(SV|ME)\\d{2}:",
+  "templates": {
+    "sv": {
+      "packs_per_box": 36,
+      "boxes_per_case": 6,
+      "slots": [
+        {
+          "name": "Common",
+          "count": 4,
+          "printing": "Normal",
+          "weights": {
+            "Common": 1.0
+          }
+        },
+        {
+          "name": "Uncommon",
+          "count": 3,
+          "printing": "Normal",
+          "weights": {
+            "Uncommon": 1.0
+          }
+        },
+        {
+          "name": "Reverse holo",
+          "count": 1,
+          "printing": "Reverse Holofoil",
+          "weights": {
+            "Common": 0.55,
+            "Uncommon": 0.35,
+            "Rare": 0.1
+          }
+        },
+        {
+          "name": "Reverse holo or illustration",
+          "count": 1,
+          "printing": "Reverse Holofoil",
+          "weights": {
+            "Common": 0.55,
+            "Uncommon": 0.35,
+            "Rare": 0.1
+          },
+          "upgrades": {
+            "Illustration Rare": 0.077,
+            "Special Illustration Rare": 0.031
+          }
+        },
+        {
+          "name": "Rare or better",
+          "count": 1,
+          "printing": "Holofoil",
+          "weights": {
+            "Rare": 1.0
+          },
+          "upgrades": {
+            "Double Rare": 0.143,
+            "Ultra Rare": 0.067,
+            "Hyper Rare": 0.0185
+          }
+        }
+      ],
+      "hits": [
+        "Double Rare",
+        "Ultra Rare",
+        "Illustration Rare",
+        "Special Illustration Rare",
+        "Hyper Rare"
+      ],
+      "odds_notes": [
+        {
+          "what": "Double Rare",
+          "rate": "About 1 in 7 packs",
+          "source": "community"
+        },
+        {
+          "what": "Ultra Rare",
+          "rate": "About 1 in 15 packs",
+          "source": "community"
+        },
+        {
+          "what": "Illustration Rare",
+          "rate": "About 1 in 13 packs",
+          "source": "community"
+        },
+        {
+          "what": "Special Illustration Rare",
+          "rate": "About 1 in 32 packs",
+          "source": "community"
+        },
+        {
+          "what": "Hyper Rare (gold)",
+          "rate": "About 1 in 54 packs",
+          "source": "community"
+        },
+        {
+          "what": "Same rates for every main Scarlet & Violet set",
+          "rate": "TCGplayer measured the base set and 151; later sets vary somewhat",
+          "source": "assumed"
+        },
+        {
+          "what": "Reverse holo rarity split",
+          "rate": "55% common, 35% uncommon, 10% rare",
+          "source": "assumed"
+        }
+      ]
+    },
+    "mega": {
+      "packs_per_box": 36,
+      "boxes_per_case": 6,
+      "slots": [
+        {
+          "name": "Common",
+          "count": 4,
+          "printing": "Normal",
+          "weights": {
+            "Common": 1.0
+          }
+        },
+        {
+          "name": "Uncommon",
+          "count": 3,
+          "printing": "Normal",
+          "weights": {
+            "Uncommon": 1.0
+          }
+        },
+        {
+          "name": "Reverse holo",
+          "count": 1,
+          "printing": "Reverse Holofoil",
+          "weights": {
+            "Common": 0.55,
+            "Uncommon": 0.35,
+            "Rare": 0.1
+          }
+        },
+        {
+          "name": "Reverse holo or illustration",
+          "count": 1,
+          "printing": "Reverse Holofoil",
+          "weights": {
+            "Common": 0.55,
+            "Uncommon": 0.35,
+            "Rare": 0.1
+          },
+          "upgrades": {
+            "Illustration Rare": 0.111,
+            "Special Illustration Rare": 0.0099
+          }
+        },
+        {
+          "name": "Rare or better",
+          "count": 1,
+          "printing": "Holofoil",
+          "weights": {
+            "Rare": 1.0
+          },
+          "upgrades": {
+            "Double Rare": 0.2,
+            "Ultra Rare": 0.083,
+            "Mega Hyper Rare": 0.00079
+          }
+        }
+      ],
+      "hits": [
+        "Double Rare",
+        "Ultra Rare",
+        "Illustration Rare",
+        "Special Illustration Rare",
+        "Mega Hyper Rare"
+      ],
+      "odds_notes": [
+        {
+          "what": "Double Rare",
+          "rate": "About 1 in 5 packs",
+          "source": "community"
+        },
+        {
+          "what": "Ultra Rare",
+          "rate": "About 1 in 12 packs",
+          "source": "community"
+        },
+        {
+          "what": "Illustration Rare",
+          "rate": "About 1 in 9 packs",
+          "source": "community"
+        },
+        {
+          "what": "Special Illustration Rare",
+          "rate": "About 1 in 101 packs (TCGplayer, 5,000+ packs)",
+          "source": "community"
+        },
+        {
+          "what": "Mega Hyper Rare",
+          "rate": "About 1 in 1,260 packs",
+          "source": "community"
+        },
+        {
+          "what": "Same rates for every Mega Evolution set",
+          "rate": "Measured on ME01; later sets may differ",
+          "source": "assumed"
+        },
+        {
+          "what": "Reverse holo rarity split",
+          "rate": "55% common, 35% uncommon, 10% rare",
+          "source": "assumed"
+        }
+      ]
+    }
+  },
+  "print_status": {},
+  "history_start": "2025-11-01"
+}

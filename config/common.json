@@ -1,0 +1,29 @@
+{
+  "_readme": "Settings shared by every game. Edit freely; the dashboard explains each number using these values.",
+  "selling": {
+    "fee_pct": 0.1325,
+    "per_card_cost": 1.00,
+    "sell_threshold": 3.00,
+    "bulk_value": 0.02,
+    "sealed_fee_pct": 0.1325,
+    "sealed_ship_cost": 12.00
+  },
+  "buying": {
+    "_note": "Estimates for what you actually pay: cheapest listing + shipping + sales tax (Anaheim, CA).",
+    "sales_tax": 0.0775,
+    "ship_single": 1.50,
+    "ship_sealed": {"pack": 1.50, "bundle": 5.00, "etb": 6.00, "box": 6.00, "case": 20.00, "other": 6.00}
+  },
+  "zones": {
+    "_note": "How the buy labels are decided, using the last 90 days of market prices.",
+    "near_low_pct": 0.05,
+    "above_usual_pct": 0.10,
+    "min_points": 4
+  },
+  "benchmark": {
+    "_note": "Federal long-term rates used for the after-tax comparison. Collectibles are taxed up to 28%; stocks at 15% for most people.",
+    "collectibles_tax": 0.28,
+    "stock_tax": 0.15,
+    "interest_tax": 0.24
+  }
+}

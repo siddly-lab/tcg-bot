@@ -54,3 +54,16 @@ def pct(new, old):
     if new is None or not old:
         return None
     return round((new - old) / old * 100, 1)
+
+
+def series_index(hist: dict[str, dict[str, list]], keys: set[str] | None = None) -> dict[str, list]:
+    """key -> [(date, price)] across every saved day, oldest first."""
+    out: dict[str, list] = {}
+    for d in sorted(hist):
+        for k, e in hist[d].items():
+            if keys is not None and k not in keys:
+                continue
+            v = market(e)
+            if v:
+                out.setdefault(k, []).append((d, v))
+    return out

@@ -59,3 +59,38 @@ def raw(date="2026-11-03"):
                "products": [mystery_p], "prices": mystery_pr}
     return {"category": 89, "fetched_at": f"{date}T21:00:00+00:00", "source_updated": None,
             "groups": [origins_group(), legacy, mystery]}
+
+
+def pokemon_raw(date="2026-11-03"):
+    """A Mega Evolution set and a vintage set, named the way TCGplayer names them."""
+    def pcard(pid, name, rarity, number, prices):
+        prod = {"productId": pid, "name": name, "cleanName": name, "imageUrl": f"https://img/{pid}.jpg", "groupId": 2,
+                "url": f"https://www.tcgplayer.com/product/{pid}",
+                "extendedData": [{"name": "Rarity", "value": rarity}, {"name": "Number", "value": number}]}
+        pr = [{"productId": pid, "lowPrice": v * 0.9, "midPrice": v, "highPrice": v * 2, "marketPrice": v,
+               "directLowPrice": None, "subTypeName": sub} for sub, v in prices.items()]
+        return prod, pr
+    items, pid = [], 5000
+    for i in range(20):
+        items.append(pcard(pid := pid + 1, f"Common {i} - {i+1:03d}/103", "Common", f"{i+1:03d}/103", {"Normal": 0.05, "Reverse Holofoil": 0.25}))
+    for i in range(12):
+        items.append(pcard(pid := pid + 1, f"Uncommon {i} - {i+30:03d}/103", "Uncommon", f"{i+30:03d}/103", {"Normal": 0.10, "Reverse Holofoil": 0.40}))
+    for i in range(8):
+        items.append(pcard(pid := pid + 1, f"Rare {i} - {i+50:03d}/103", "Rare", f"{i+50:03d}/103", {"Holofoil": 0.50, "Reverse Holofoil": 0.80}))
+    for i, r in enumerate(("Double Rare", "Ultra Rare", "Illustration Rare", "Special Illustration Rare", "Mega Hyper Rare")):
+        for j in range(3):
+            items.append(pcard(pid := pid + 1, f"{r} {j} - {110+i*3+j}/103", r, f"{110+i*3+j}/103", {"Holofoil": [3, 8, 6, 60, 400][i]}))
+    for name, price in (("Delta Reign Booster Box", 230.0), ("Delta Reign Booster Box Case", 1340.0),
+                        ("Delta Reign Elite Trainer Box", 106.0), ("Delta Reign Booster Bundle", 45.0),
+                        ("Delta Reign Booster Pack", 6.0), ("Delta Reign Pokemon Center Elite Trainer Box (Exclusive)", 295.0)):
+        p, pr = sealed(pid := pid + 1, name, price)
+        items.append((p, pr))
+    me = {"group": {"groupId": 24831, "name": "ME06: Delta Reign", "abbreviation": "DLR", "publishedOn": "2026-08-06T00:00:00"},
+          "products": [p for p, _ in items], "prices": [x for _, pr in items for x in pr]}
+    vint = [pcard(9001, "Charizard - 004/102", "Holo Rare", "004/102", {"Holofoil": 987.0}),
+            pcard(9002, "Pikachu - 058/102", "Common", "058/102", {"Normal": 3.0}), sealed(9003, "Base Set Booster Pack [Revised Unlimited Edition]", 898.0)]
+    base = {"group": {"groupId": 604, "name": "Base Set", "abbreviation": "BS", "publishedOn": "1999-01-09T00:00:00"},
+            "products": [p for p, _ in vint], "prices": [x for _, pr in vint for x in pr]}
+    promo = {"group": {"groupId": 1418, "name": "WoTC Promo", "abbreviation": "PR", "publishedOn": "1999-07-01T00:00:00"},
+             "products": [pcard(9100, "Mewtwo - 3", "Promo", "3", {"Holofoil": 20})[0]], "prices": []}
+    return {"category": 3, "fetched_at": f"{date}T21:00:00+00:00", "source_updated": None, "groups": [me, base, promo]}

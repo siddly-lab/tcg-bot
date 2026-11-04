@@ -40,16 +40,18 @@ def clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def card_embed(card: dict) -> dict:
+def card_embed(card: dict, game_name: str = "") -> dict:
     fields = []
-    for sub, label in (("normal", "Normal"), ("foil", "Foil")):
-        v = card.get(sub)
+    for sub, v in (card.get("prices") or {}).items():
         if v and (v.get("market") or v.get("low")):
-            fields.append((label, f"**{money(v.get('market') or v.get('low'))}**\nLowest listing {money(v.get('low'))}\n"
-                                  f"7 days {chg(v.get('d7'))} · 30 days {chg(v.get('d30'))}", True))
+            fields.append((sub, f"**{money(v.get('market') or v.get('low'))}**\nLowest listing {money(v.get('low'))}\n"
+                                f"7 days {chg(v.get('d7'))} · 30 days {chg(v.get('d30'))}", True))
+    if card.get("low90") and card.get("high90"):
+        fields.append(("Last 90 days", f"{money(card['low90'])} to {money(card['high90'])}\n{card.get('zone_label') or ''}", True))
     if not card.get("sealed"):
         fields.append(("Pull odds", one_in(card.get("boxes_per_hit")), True))
-    desc = f"{card.get('kind', '')} · {card.get('set') or ''} {card.get('number') or ''}".strip(" ·")
+    where = " · ".join(x for x in (game_name, card.get("set_name") or card.get("set"), card.get("number")) if x)
+    desc = f"{card.get('kind', '')} · {where}".strip(" ·")
     if card.get("thin"):
         desc += "\n⚠️ Thin market: few recent sales, so treat the price as rough."
     return {"title": clip(card["name"], 256), "url": card.get("url"), "description": desc, "fields": fields,
@@ -70,84 +72,88 @@ def share_at_least(q: list[float], x: float) -> float:
     return 0.0
 
 
-def box_embed(s: dict, paid: float | None, dash: str) -> dict:
-    b = s.get("box") or {}
-    if not s.get("ev"):
-        return {"title": f"{s['name']} booster box", "description": s.get("note", "No value yet."), "color": PURPLE,
-                "fields": [("Box price", f"{money(b.get('market') or b.get('low'))} (MSRP {money(s.get('msrp_box'))})", False)],
-                "url": dash}
-    paid = paid or b.get("market") or s["msrp_box"]
-    e, n = s["ev"], s["sim"]["net"]
+def box_embed(s: dict, d: dict, paid: float | None, dash: str, game_name: str = "") -> dict:
+    """s: the set's summary row, d: its detail file."""
+    h = s.get("hero") or {}
+    title = f"{game_name} · {s['name']}" if game_name else s["name"]
+    zone = f"\n{h.get('zone_label')} (90 days: {money(h.get('low90'))} to {money(h.get('high90'))})" if h.get("low90") else ""
+    if not d.get("modeled"):
+        chase = "\n".join(f"{c['name']}: {money(c['price'])}" for c in d.get("chase", [])[:5])
+        return {"title": f"{title} {(h.get('kind_label') or 'sealed').lower()}", "url": dash, "color": PURPLE,
+                "description": f"{h.get('kind_label') or 'Sealed'} {money(h.get('market') or h.get('low'))} (MSRP {money(h.get('msrp'))}){zone}\n"
+                               "*No box value for this set: there's no reliable pack data for it.*",
+                "fields": [("Top cards", clip(chase or "—", 1024), False)]}
+    paid = paid or h.get("market") or (d.get("msrp") or {}).get("box")
+    e, n = d["ev"], d["sim"]["net"]
     beat = share_at_least(n["quantiles"], paid)
     gap = e["box_net"] - paid
-    hits = "\n".join(f"{h['label']}: {round(h['chance_in_box'] * 100)}% chance per box" for h in s.get("hit_odds", []))
-    chase = "\n".join(f"{c['name']}: {money(c['price'])} ({one_in(c['boxes_per_hit'])})" for c in s.get("chase", [])[:5])
+    hits = "\n".join(f"{x['label']}: {round(x['chance_in_box'] * 100)}% chance per box" for x in d.get("hit_odds", []))
+    chase = "\n".join(f"{c['name']}: {money(c['price'])} ({one_in(c.get('boxes_per_hit'))})" for c in d.get("chase", [])[:5])
+    ways = " · ".join(f"{w['label']} {money(w['per_pack'])}/pack" for w in d.get("ways_to_buy", [])[:3])
     return {
-        "title": f"{s['name']} booster box at {money(paid)}", "url": dash, "color": GREEN if gap >= 0 else ORANGE,
-        "description": f"**{s['open_vs_hold']['verdict']}**\nAn average box {'makes' if gap >= 0 else 'loses'} about "
-                       f"{money(abs(gap))} once you sell the cards, and {round(beat * 100)} in 100 boxes come out ahead.",
+        "title": f"{title} booster box at {money(paid)}", "url": dash, "color": GREEN if gap >= 0 else ORANGE,
+        "description": f"**{d['open_vs_hold']['verdict']}**\nAn average box {'makes' if gap >= 0 else 'loses'} about "
+                       f"{money(abs(gap))} once you sell the cards, and {round(beat * 100)} in 100 boxes come out ahead.{zone}",
         "fields": [
-            ("Box price today", f"{money(b.get('market'))} ({pct(b.get('vs_msrp'))} vs MSRP)", True),
+            ("Box price today", f"{money(h.get('market'))} ({pct(h.get('vs_msrp'))} vs MSRP)", True),
             ("Average value inside", money(e["box_sticker"]), True),
             ("You'd pocket (average)", money(e["box_net"]), True),
             ("Typical box (pocket)", f"{money(n['median'])}\nhalf do better, half worse", True),
             ("Bad box / great box", f"{money(n['p10'])} / {money(n['p90'])}", True),
-            ("Sell it sealed instead", money(s["open_vs_hold"].get("sell_sealed_net")), True),
+            ("Cheapest per pack", ways or "—", True),
             ("Hits", hits or "—", False),
             ("Top chase cards", clip(chase or "—", 1024), False),
         ],
     }
 
 
-def sets_embed(latest: dict, dash: str) -> dict:
+def sets_embed(summary: dict, dash: str) -> dict:
     lines = []
-    for s in latest["sets"]:
-        b = s.get("box") or {}
+    for s in summary["sets"][:20]:
+        h = s.get("hero") or {}
+        price = f"{(h.get('kind_label') or 'box').lower()} {money(h.get('market') or h.get('low'))}"
+        zone = f" · {h['zone_label'].lower()}" if h.get("zone_label") and h.get("zone") not in ("normal", "new") else ""
         if s.get("ev"):
-            lines.append(f"**{s['name']}**: box {money(b.get('market'))} · pocket avg {money(s['ev']['box_net'])} · "
-                         f"typical {money(s['sim']['net']['median'])} · {round((s['sim']['net']['beat_market'] or 0) * 100)}% pay for themselves")
+            lines.append(f"**{s['name']}**: {price}{zone} · pocket avg {money(s['ev']['box_net'])} · "
+                         f"{round((s['ev']['beat_market'] or 0) * 100)}% of boxes pay for themselves")
+        elif s.get("released"):
+            lines.append(f"**{s['name']}**: {price}{zone}")
         else:
-            lines.append(f"**{s['name']}**: pre-order box {money(b.get('market') or b.get('low'))} · releases {s['release']}")
-    return {"title": "Riftbound booster boxes today", "url": dash, "color": PURPLE,
-            "description": clip("\n".join(lines), 4000) + "\n\n*Pocket = after TCGplayer fees and shipping. Typical = the middle box.*"}
+            lines.append(f"**{s['name']}**: pre-order {price} · releases {s['release']}")
+    return {"title": f"{summary['name']} sets, newest first", "url": dash, "color": PURPLE,
+            "description": clip("\n".join(lines), 4000) + "\n\n*Pocket = after TCGplayer fees and shipping.*"}
 
 
-def sealed_embed(latest: dict, dash: str) -> dict:
+def sealed_embed(summary: dict, dash: str) -> dict:
     lines = []
-    for r in latest["sealed"]:
-        if r["kind"] not in ("box", "case"):
-            continue
-        per_year = "too new" if r.get("annualized") is None else f"{pct(r['annualized'])}/yr"
-        lines.append(f"**{r['name']}**: {money(r.get('market') or r.get('low'))} · {pct(r.get('vs_msrp'))} vs MSRP · "
-                     f"{per_year} · 30d {chg(r.get('change_30d'))}{' · pre-order' if r.get('presale') else ''}")
-    return {"title": "Sealed boxes and cases", "url": dash + "#sealed", "color": PURPLE, "description": clip("\n".join(lines), 4000)}
+    for r in summary["today"]["buy_signals"][:12]:
+        lines.append(f"**{r['name']}**: {money(r.get('market'))} · {r['zone_label'].lower()} "
+                     f"(90 days {money(r.get('low90'))}–{money(r.get('high90'))}) · {pct(r.get('vs_msrp'))} vs MSRP")
+    return {"title": f"{summary['name']}: sealed at a good price right now", "url": dash, "color": GREEN,
+            "description": clip("\n".join(lines) or "Nothing is near its 90-day low or at MSRP right now.", 4000)}
 
 
-def movers_embed(latest: dict, period: str, dash: str) -> dict:
-    m = latest["movers"]
+def movers_embed(summary: dict, period: str, dash: str) -> dict:
+    m = summary["movers"]
     key, up, down, label = ("d1", m["up_1d"], m["down_1d"], "since yesterday") if period == "day" else ("d7", m["up_7d"], m["down_7d"], "this week")
-    fmt = lambda rows: "\n".join(f"{r['name']} ({r['set']}): {money(r['price'])} {chg(r[key])}" for r in rows[:8]) or "Not enough history yet."
-    return {"title": f"Biggest price moves {label}", "url": dash, "color": PURPLE,
+    fmt = lambda rows: "\n".join(f"{r['name']} ({r.get('set_name') or r['set']}): {money(r['price'])} {chg(r[key])}" for r in rows[:8]) or "Not enough history yet."
+    return {"title": f"{summary['name']}: biggest price moves {label}", "url": dash, "color": PURPLE,
             "fields": [("Up", clip(fmt(up), 1024), False), ("Down", clip(fmt(down), 1024), False)]}
 
 
-def digest_embed(latest: dict, dash: str) -> dict:
-    """The daily post."""
-    lines = []
-    for s in latest["sets"]:
-        b = s.get("box") or {}
-        if not b:
-            continue
-        extra = f" · pocket avg {money(s['ev']['box_net'])}" if s.get("ev") else " · pre-order"
-        lines.append(f"**{s['name']}** box {money(b.get('market') or b.get('low'))} ({chg(b.get('change_7d'))} 7d){extra}")
-    m = latest["movers"]
-    up = "\n".join(f"{r['name']}: {money(r['price'])} {chg(r['d1'])}" for r in m["up_1d"][:3])
-    down = "\n".join(f"{r['name']}: {money(r['price'])} {chg(r['d1'])}" for r in m["down_1d"][:3])
-    fields = [("Biggest risers today", up or "Not enough history yet.", True), ("Biggest drops today", down or "—", True)]
-    for n in latest.get("new_sets") or []:
-        fields.append(("New set spotted", f"{n['name']} is now listed on TCGplayer.", False))
-    return {"title": f"Riftbound prices for {latest['price_date']}", "url": dash, "color": PURPLE,
-            "description": clip("\n".join(lines), 4000), "fields": fields}
+def digest_embed(summaries: dict, dash: str) -> dict:
+    """The daily post: buy signals and movers for every game."""
+    fields = []
+    date = max(s["price_date"] for s in summaries.values())
+    for gid, s in summaries.items():
+        t = s["today"]
+        buys = "\n".join(f"{r['name']}: {money(r['market'])} · {r['zone_label'].lower()}" for r in t["buy_signals"][:4])
+        up = "\n".join(f"{r['name']}: {money(r['price'])} {chg(r['d1'])}" for r in s["movers"]["up_1d"][:3])
+        fields.append((f"{s['name']}: good prices on sealed", buys or "Nothing near its low today.", False))
+        fields.append((f"{s['name']}: biggest risers", up or "Not enough history yet.", False))
+        for a in t.get("alerts", [])[:2]:
+            fields.append((f"{s['name']}: heads up", a["text"], False))
+    return {"title": f"Card prices for {date}", "url": dash, "color": PURPLE, "fields": fields[:25]}
 
 
 def check_watch(w: dict, card: dict | None) -> tuple[str, float | None]:
@@ -166,6 +172,7 @@ def check_watch(w: dict, card: dict | None) -> tuple[str, float | None]:
 
 
 def collection_embed(rows: list[dict], cards: dict) -> dict:
+    """rows: what the member owns; cards: every product by id."""
     total = cost = 0.0
     have_cost = False
     lines = []
