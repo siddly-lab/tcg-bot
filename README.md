@@ -1,4 +1,4 @@
-# Foil
+# Grail
 
 The code lives in the `tcg-bot` repo.
 

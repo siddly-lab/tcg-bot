@@ -1,5 +1,5 @@
 "use strict";
-/* Foil — one page, routed by the address bar: #/<game>/<view>/<param> */
+/* Grail — one page, routed by the address bar: #/<game>/<view>/<param> */
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -138,7 +138,7 @@ async function render(){
     $("#stamp").textContent = `${sm.name} prices from ${fmtDate(sm.stale_since || sm.price_date)}.`;
     $("#stale")?.remove();
     if (sm.stale_since) $("#view").insertAdjacentHTML("beforebegin", `<div id="stale" class="wrap"><div class="alert">⚠️ TCGplayer's prices didn't update today. Everything here is from ${fmtDate(sm.stale_since)}.</div></div>`);
-    document.title = `${sm.name} · Foil`;
+    document.title = `${sm.name} · Grail`;
     const views = {today: viewToday, sets: viewSets, set: viewSet, sealed: viewSealed, cards: viewCards, card: viewCards, movers: viewMovers, how: viewHow};
     await (views[r.view] || viewToday)(v, sm, r.param);
     if (r.view === "card" && r.param) openCard(r.game, r.param);
