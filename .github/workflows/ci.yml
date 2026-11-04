@@ -21,6 +21,8 @@ jobs:
         with: {python-version: "3.12"}
       - run: pip install -r requirements.txt
       - run: python -m tcg.build --no-backfill
+      - name: Data audit report
+        run: python -m tcg.audit
       - name: Layout check (phone, tablet, laptop, wide) on today's real data
         run: |
           npm install --no-save playwright@1.49.1 >/dev/null
