@@ -69,3 +69,9 @@
 
 **Discord bot**
 - Commands work across games: `/box` searches every game's sets, `/sets`, `/sealed`, `/movers` take a game. `/sealed` now lists good prices. The daily post covers every game.
+
+## 0.2.1
+
+- Set names now show their release year everywhere on the dashboard and in the bot, for example "Origins (2025)". Names that already contain a year aren't doubled up.
+- Sets that haven't been released yet are left off the dashboard and out of the bot until release day (for example Riftbound: Legacy and Pokémon: Delta Reign). Their prices are still saved in the background, so price history is ready the day they come out.
+- Set search also matches the year. Year groups on the Riftbound sets page no longer repeat the year, and pre-order alerts show a readable date.

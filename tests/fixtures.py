@@ -55,7 +55,7 @@ def raw(date="2026-11-03"):
               "products": [sealed(1, "Legacy - Booster Display", 230.0)[0]],
               "prices": sealed(1, "Legacy - Booster Display", 230.0)[1]}
     mystery_p, mystery_pr = sealed(2, "Mystery - Booster Display", 120.0)
-    mystery = {"group": {"groupId": 99999, "name": "Mystery Set", "publishedOn": "2027-04-30T00:00:00"},
+    mystery = {"group": {"groupId": 99999, "name": "Mystery Set", "publishedOn": "2026-10-30T00:00:00"},
                "products": [mystery_p], "prices": mystery_pr}
     return {"category": 89, "fetched_at": f"{date}T21:00:00+00:00", "source_updated": None,
             "groups": [origins_group(), legacy, mystery]}

@@ -176,6 +176,7 @@ div.thumb{cursor:default}
 #preview.pinned img{width:min(82vw,380px)}
 
 .only-sm{display:none}
+.yr{color:var(--muted);font-weight:500}
 .prose{max-width:760px}.prose p{margin:0 0 14px}
 footer{padding:30px 16px 48px}
 

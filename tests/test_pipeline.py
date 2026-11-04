@@ -142,7 +142,7 @@ def test_full_build_offline(cfg, tmp_build):
     assert [g["id"] for g in games["games"]] == ["riftbound", "pokemon"]
     s = load(tmp_build, "riftbound", "summary.json")
     sets = {x["code"]: x for x in s["sets"]}
-    assert set(sets) == {"OGN", "LEG"} and sets["OGN"]["modeled"] and not sets["LEG"]["modeled"]
+    assert set(sets) == {"OGN"} and sets["OGN"]["modeled"]  # Legacy isn't out yet, so it's left off
     o = load(tmp_build, "riftbound", "sets/OGN.json")
     box = next(r for r in o["sealed"] if r["kind"] == "box")
     assert box["market"] == 150.0 and box["vs_msrp"] == pytest.approx(150 / 119.99 - 1, abs=1e-3)
@@ -154,8 +154,14 @@ def test_full_build_offline(cfg, tmp_build):
     assert top["pull_cost"] >= 0 and top["pull_boxes"] == pytest.approx(30, rel=0.05)
     assert 0 < o["top10_share"] <= 1
     assert [w["kind"] for w in o["ways_to_buy"]][0] in ("box", "case", "pack")
-    assert s["new_sets"] == [{"name": "Mystery Set", "published": "2027-04-30T00:00:00"}]
-    assert any(a["type"] == "upcoming" for a in s["today"]["alerts"])
+    assert s["new_sets"] == [{"name": "Mystery Set", "published": "2026-10-30T00:00:00"}]
+    assert not any(a["type"] == "upcoming" for a in s["today"]["alerts"])
+    assert not (tmp_build / "out" / "riftbound" / "sets" / "LEG.json").exists()
+    assert not any(r["set"] == "LEG" for r in s["sealed"])
+    # but its prices are still saved, so history is ready on release day
+    import gzip
+    snap = json.loads(gzip.open(next((tmp_build / "hist" / "riftbound").glob("*.json.gz")), "rt").read())["p"]
+    assert "1:Normal" in snap
     cards = load(tmp_build, "riftbound", "cards.json")
     over = next(c for c in cards if c["name"] == "Fortified Position (Oversized)")
     assert not over.get("boxes_per_hit")  # searchable, but not in packs
