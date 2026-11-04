@@ -20,6 +20,7 @@ def store(tmp_path, monkeypatch):
     (tmp_path / "raw").mkdir()
     (tmp_path / "raw" / "riftbound.json").write_text(json.dumps(fixtures.raw()))
     (tmp_path / "raw" / "pokemon.json").write_text(json.dumps(fixtures.pokemon_raw()))
+    (tmp_path / "raw" / "onepiece.json").write_text(json.dumps(fixtures.onepiece_raw()))
     build.run(offline=True)
     out = tmp_path / "out"
     games = json.loads((out / "games.json").read_text())["games"]

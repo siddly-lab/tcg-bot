@@ -83,3 +83,12 @@
 - **What changed:** names clamp to two lines (hover shows the full name), every box lets its contents shrink and wrap, the MSRP note sits on its own line under the range bar, table text wraps, and tablets hide the less important sealed columns.
 - **Guard for the future:** a layout check opens every page in a real browser at phone, tablet, laptop and wide-screen sizes, using that day's real data. It fails if anything sticks out of its box, the page scrolls sideways, a table is cut off on a tablet or larger, or the page throws an error. It runs on every change and before every daily publish; if it fails, the update doesn't go live and yesterday's page stays up.
 - Browsers now always load the latest files after an update (no more stale pages for up to 10 minutes).
+
+## 0.4.0 — One Piece
+
+- **One Piece Card Game added** as a third game. Every TCGplayer group selling booster boxes or packs is a set (main OP sets, Extra Boosters, Premium Boosters), grouped by year, with a year of price history filled in on the first run.
+- **Box value for main OP sets** (OP-01 onward), modeled as 12-card packs, 24 per box, 12 boxes per case. Bandai publishes no pull rates, so every rate is a community estimate or our assumption: about 6 to 7 Super Rares per box, a Secret Rare every 1 to 2 boxes, about 1.3 alternate arts per box, an SP card per 6 boxes, a Treasure Rare per case, a Manga rare per 40 boxes. Extra and Premium Boosters get sealed tracking and card prices only.
+- **Left out of the box math:** any version whose odds are unknown: Super Alternate Arts, Wanted Posters, gold-stamped signatures, box toppers and anything else with an unfamiliar label. Only alternate art / parallel, SP, Manga and Treasure Rare versions count. They still appear in chase cards and search with their prices.
+- **No MSRP yet for One Piece.** I couldn't confirm an official English MSRP, so "vs MSRP", "per year" and the investment comparison stay blank for One Piece until one is added to `config/games/onepiece.json`. Buy labels still work from the 90-day history.
+- "If you sold it" now shows for every sealed product, MSRP or not.
+- On phones the game switcher gets its own row so three games fit.

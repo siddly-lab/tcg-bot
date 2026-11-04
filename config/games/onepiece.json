@@ -1,0 +1,38 @@
+{
+  "order": 3,
+  "_readme": "One Piece sets are found automatically: any TCGplayer group selling a booster box or pack is a set. Box value is worked out for main OP booster sets only; Extra Boosters (EB) and Premium Boosters (PRB) have different packs and get sealed tracking and card prices. Bandai publishes no pull rates, so every rate here is a community estimate or our assumption. MSRP is left blank until confirmed; add it under msrp (for example {\"box\": 95.76, \"pack\": 3.99, \"case\": 1149.12}).",
+  "id": "onepiece", "name": "One Piece", "category": 68, "module": "onepiece",
+  "group_by": "year",
+  "packs": {"pack": 1, "sleeved_pack": 1, "box": 24, "case": 288},
+  "history": "scoped",
+  "history_card_min": 5,
+  "history_start": "2025-11-01",
+  "modeled_set_pattern": "^OP\\d{2}",
+  "msrp": {},
+  "templates": {
+    "booster": {
+      "packs_per_box": 24, "boxes_per_case": 12,
+      "slots": [
+        {"name": "Common", "count": 7, "printing": "Normal", "weights": {"C": 1.0}},
+        {"name": "Uncommon", "count": 3, "printing": "Normal", "weights": {"UC": 1.0}},
+        {"name": "Rare or leader", "count": 1, "printing": "Normal", "weights": {"R": 0.83, "L": 0.17}},
+        {"name": "Rare or better", "count": 1, "printing": "Foil", "weights": {"R": 1.0},
+         "upgrades": {"SR": 0.28, "SEC": 0.03, "AltArt": 0.054, "SECAlt": 0.00347, "SP": 0.0069, "TR": 0.00347, "Manga": 0.00104}}
+      ],
+      "hits": ["SR", "SEC", "AltArt", "SP", "TR", "Manga"],
+      "odds_notes": [
+        {"what": "Super Rare", "rate": "About 6 to 7 per box", "source": "community"},
+        {"what": "Secret Rare", "rate": "About 1 in every 1 to 2 boxes (sources range from 1 per box to 1 per 3)", "source": "community"},
+        {"what": "Alternate art (parallel)", "rate": "About 1.3 per box", "source": "community"},
+        {"what": "SP card", "rate": "About 1 per 6 boxes", "source": "community"},
+        {"what": "Manga rare", "rate": "About 1 per 40 boxes (estimates vary widely)", "source": "community"},
+        {"what": "Treasure Rare", "rate": "About 1 per case (12 boxes)", "source": "community"},
+        {"what": "Secret Rare alternate art", "rate": "About 1 per case (12 boxes)", "source": "assumed"},
+        {"what": "Leaders", "rate": "About 4 per box, in the rare slot", "source": "assumed"},
+        {"what": "Same rates for every OP set", "rate": "Rates differ from set to set by up to 2x", "source": "assumed"},
+        {"what": "Super alternate arts, Wanted Posters, gold-stamped signatures, box toppers and other special versions", "rate": "Left out: odds unknown", "source": "assumed"}
+      ]
+    }
+  },
+  "print_status": {}
+}
