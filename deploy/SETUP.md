@@ -1,11 +1,11 @@
-# Setting up the Discord bot on the Synology
+# Setting up the Foil Discord bot on the Synology
 
 About 20 minutes, once. After that, updates install themselves within 5 minutes of being merged.
 
 ## 1. Create the bot in Discord (about 5 minutes)
 
 1. On your PC, go to https://discord.com/developers/applications and sign in.
-2. Click **New Application** (top right). Name it `TCG Bot`, tick the box, click **Create**.
+2. Click **New Application** (top right). Name it `Foil`, tick the box, click **Create**.
 3. In the left menu click **Bot**. Click **Reset Token**, then **Yes, do it!**, then **Copy**.
    Paste it into Notepad for a minute. This is the bot's password, so don't share it.
 4. In the left menu click **OAuth2**, then scroll to **OAuth2 URL Generator**.

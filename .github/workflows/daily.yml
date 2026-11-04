@@ -34,6 +34,15 @@ jobs:
           if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
           git commit -qm "Prices for $(date -u +%F) [skip ci]"
           for i in 1 2 3 4; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((i*5)); done
+      - name: Layout check before publishing (a broken page never goes live)
+        run: |
+          npm install --no-save playwright@1.49.1 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          (cd site && python -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 2
+          node tests/layout/check.js http://localhost:8765/
+      - name: Stamp this build so browsers load fresh files
+        run: sed -i "s/__BUILD__/$(date -u +%Y%m%d%H%M)-${GITHUB_SHA::7}/g" site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: {path: site}

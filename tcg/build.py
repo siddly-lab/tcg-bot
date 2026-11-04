@@ -530,7 +530,8 @@ def run(offline: bool = False, only: str | None = None, do_backfill: bool = True
             s = json.loads(f.read_text())
             index.append({"id": g["id"], "name": g["name"], "price_date": s["price_date"], "sets": len(s["sets"]),
                           "group_by": s["group_by"]})
-    (OUT / "games.json").write_text(json.dumps({"version": __version__, "games": index}, separators=(",", ":")))
+    stamp = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    (OUT / "games.json").write_text(json.dumps({"version": __version__, "generated_at": stamp, "games": index}, separators=(",", ":")))
     return out
 
 

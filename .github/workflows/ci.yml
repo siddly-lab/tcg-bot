@@ -21,5 +21,12 @@ jobs:
         with: {python-version: "3.12"}
       - run: pip install -r requirements.txt
       - run: python -m tcg.build --no-backfill
+      - name: Layout check (phone, tablet, laptop, wide) on today's real data
+        run: |
+          npm install --no-save playwright@1.49.1 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          (cd site && python -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 2
+          node tests/layout/check.js http://localhost:8765/
       - uses: actions/upload-artifact@v4
         with: {name: site-preview, path: site, retention-days: 7}

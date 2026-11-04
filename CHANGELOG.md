@@ -75,3 +75,11 @@
 - Set names now show their release year everywhere on the dashboard and in the bot, for example "Origins (2025)". Names that already contain a year aren't doubled up.
 - Sets that haven't been released yet are left off the dashboard and out of the bot until release day (for example Riftbound: Legacy and Pokémon: Delta Reign). Their prices are still saved in the background, so price history is ready the day they come out.
 - Set search also matches the year. Year groups on the Riftbound sets page no longer repeat the year, and pre-order alerts show a readable date.
+
+## 0.3.0 — Foil
+
+- **New name: Foil.** The dashboard, page titles and bot status now say Foil. (Name the Discord app "Foil" when you set it up; the repo stays `tcg-bot`.)
+- **What was wrong:** long product names (for example "Evolving Skies Elite Trainer Box [Flareon/Jolteon/Umbreon/Leafeon]") pushed prices and range bars out of their cards on the Today page. The card pop-up also spilled sideways on phones, and some tables were cut off at tablet width.
+- **What changed:** names clamp to two lines (hover shows the full name), every box lets its contents shrink and wrap, the MSRP note sits on its own line under the range bar, table text wraps, and tablets hide the less important sealed columns.
+- **Guard for the future:** a layout check opens every page in a real browser at phone, tablet, laptop and wide-screen sizes, using that day's real data. It fails if anything sticks out of its box, the page scrolls sideways, a table is cut off on a tablet or larger, or the page throws an error. It runs on every change and before every daily publish; if it fails, the update doesn't go live and yesterday's page stays up.
+- Browsers now always load the latest files after an update (no more stale pages for up to 10 minutes).

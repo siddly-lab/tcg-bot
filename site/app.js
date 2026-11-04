@@ -1,5 +1,5 @@
 "use strict";
-/* TCG Box Value — one page, routed by the address bar: #/<game>/<view>/<param> */
+/* Foil — one page, routed by the address bar: #/<game>/<view>/<param> */
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -26,7 +26,8 @@ const setLabel = (name, code, year) => esc(withYear(name, code, year));
 const setHTML = (name, code, year) => { const t = withYear(name, code, year); return t === name ? esc(name) : `${esc(name)} <span class="yr">(${esc(year || yearOf(code))})</span>`; };
 
 /* ---------------- data ---------------- */
-const getJSON = url => fetch(url).then(r => { if (!r.ok) throw new Error(url + " " + r.status); return r.json(); });
+const getJSON = url => fetch(url + (url.includes("games.json") ? "?t=" + Date.now() : "?v=" + encodeURIComponent(S.build || "")), {cache: "no-cache"})
+  .then(r => { if (!r.ok) throw new Error(url + " " + r.status); return r.json(); });
 async function summary(g){
   if (!S.summary[g]){
     S.summary[g] = await getJSON(`data/${g}/summary.json`);
@@ -73,7 +74,7 @@ function range(low, high, now, msrp){
   const note = msrp != null && !msrpIn ? `<span class="faint">MSRP ${money(msrp)} is ${msrp < lo ? "below" : "above"} this range</span>` : "";
   return `<div class="range" title="Last 90 days: ${money(low)} to ${money(high)}${msrp ? `. MSRP ${money(msrp)}` : ""}">
     <div class="track">${msrpIn ? `<span class="msrp" style="left:${at(msrp)}" title="MSRP ${money(msrp)}"></span>` : ""}<span class="dot" style="left:${at(now)}"></span></div>
-    <div class="ends"><span>${money(lo)}</span>${note}<span>${money(hi)}</span></div></div>`;
+    <div class="ends"><span>${money(lo)}</span><span>${money(hi)}</span></div>${note ? `<div class="range-note">${note}</div>` : ""}</div>`;
 }
 function spark(vals, w = 110, h = 30){
   if (!vals || vals.length < 2) return "";
@@ -129,7 +130,7 @@ async function render(){
   try {
     const sm = await summary(r.game);
     $("#stamp").textContent = `${sm.name} prices from ${fmtDate(sm.price_date)}.`;
-    document.title = `${sm.name} · TCG Box Value`;
+    document.title = `${sm.name} · Foil`;
     const views = {today: viewToday, sets: viewSets, set: viewSet, sealed: viewSealed, cards: viewCards, card: viewCards, movers: viewMovers, how: viewHow};
     await (views[r.view] || viewToday)(v, sm, r.param);
     if (r.view === "card" && r.param) openCard(r.game, r.param);
@@ -144,7 +145,7 @@ async function viewToday(v, sm){
   const t = sm.today;
   const alerts = (t.alerts || []).map(a => `<div class="alert"><span>${a.type === "upcoming" ? "📅" : "✨"}</span><div>${a.type === "upcoming" ? `<b>${setHTML(a.name, a.set)}</b> releases ${fmtDate(a.release)}.` : esc(a.text)}${a.price ? ` ${esc(a.kind || "Pre-orders")} at ${money(a.price)}${a.msrp ? ` vs ${money(a.msrp)} MSRP` : ""}.` : ""}</div></div>`).join("");
   const signal = r => `<a class="signal" href="${href("set", r.set)}">${art(r.image)}<div>
-      <div class="t">${esc(r.name)}</div><div class="small muted">${setLabel(r.set_name, r.set)} · ${esc(r.kind_label)}</div>
+      <div class="t" title="${esc(r.name)}">${esc(r.name)}</div><div class="small muted">${setLabel(r.set_name, r.set)} · ${esc(r.kind_label)}</div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0"><span class="p">${money(r.market)}</span>${zoneChip(r.zone, r.zone_label)}</div>
       ${range(r.low90, r.high90, r.market, r.msrp)}
       <div class="small muted" style="margin-top:4px">${r.msrp ? `${pct(r.vs_msrp)} vs MSRP · ` : ""}You'd pay about ${money(r.buy_cost)} with tax and shipping</div></div></a>`;
@@ -385,10 +386,10 @@ function sealedCols(sm, withSet){
       <div class="sub">${withSet ? setLabel(r.set_name, r.set) + " · " : ""}${esc(r.kind_label)}${r.presale ? " · pre-order" : ""}</div></div></div>`},
     {key: "price", label: "Price", num: 1, sort: r => r.market ?? r.low, html: r => `<b>${money(r.market ?? r.low)}</b>`},
     {key: "zone", label: "Buy timing", sort: r => r.low90 ? r.market / r.low90 : null, html: r => `${quietChip(r.zone, r.zone_label)}${range(r.low90, r.high90, r.market, r.msrp)}`},
-    {key: "pay", label: "You'd pay", num: 1, cls: "hide-sm", sort: r => r.buy_cost, html: r => money(r.buy_cost)},
+    {key: "pay", label: "You'd pay", num: 1, cls: "hide-md", sort: r => r.buy_cost, html: r => money(r.buy_cost)},
     {key: "msrp", label: "vs MSRP", num: 1, sort: r => r.vs_msrp, html: r => pct(r.vs_msrp)},
-    {key: "yr", label: "Per year", num: 1, cls: "hide-sm", sort: r => r.annualized, html: r => r.annualized == null ? '<span class="faint">—</span>' : pct(r.annualized)},
-    {key: "spy", label: "S&amp;P 500 same time", num: 1, cls: "hide-sm", sort: r => r.bench?.spy, html: r => r.bench?.spy == null ? '<span class="faint">—</span>' : pct(r.bench.spy)},
+    {key: "yr", label: "Per year", num: 1, cls: "hide-md", sort: r => r.annualized, html: r => r.annualized == null ? '<span class="faint">—</span>' : pct(r.annualized)},
+    {key: "spy", label: "S&amp;P 500 same time", num: 1, cls: "hide-md", sort: r => r.bench?.spy, html: r => r.bench?.spy == null ? '<span class="faint">—</span>' : pct(r.bench.spy)},
     {key: "d30", label: "30 days", num: 1, sort: r => r.change_30d, html: r => chg(r.change_30d)},
   ];
 }
@@ -579,6 +580,7 @@ $("#modal").addEventListener("click", e => { if (e.target.id === "modal" || e.ta
 /* ---------------- start ---------------- */
 getJSON("data/games.json").then(idx => {
   S.games = idx.games;
+  S.build = idx.generated_at || idx.version;
   addEventListener("hashchange", render);
   render();
 }).catch(e => { console.error(e); $("#view").innerHTML = '<p class="pad muted">Couldn\'t load the price data. Try refreshing.</p>'; });
