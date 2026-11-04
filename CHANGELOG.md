@@ -117,3 +117,10 @@
 ## 0.5.1 — Grail
 
 - New name: **Grail** (collector slang for the one card you'd chase forever). The dashboard header, browser tab, bot status and setup guide all say Grail. Name the Discord app "Grail" when you set it up; the repo and web address stay `tcg-bot`.
+
+## 0.6.0 — Discord bot ready to install
+
+- **One-command NAS install.** One pasted DSM Task Scheduler command downloads the code, saves the token and IDs, and starts the bot. No Git package, Text Editor or Container Manager project steps. See `deploy/SETUP.md`.
+- **Built-in updater.** A small `tcg-bot-updater` container checks GitHub every 5 minutes and restarts the bot when its code changes, with no DSM task needed. Library updates install on restart.
+- **Checked before shipping:** CI builds the bot's Docker image and starts it (it reaches the Discord login with a fake token), and builds every message the bot can send from that day's real data: 652 messages across 3 games and 162 sets, all within Discord's limits. Card search answers in under 60 ms.
+- Not yet tested against a live Discord server; that happens on your first run.
