@@ -82,7 +82,8 @@ def pokemon_raw(date="2026-11-03"):
             items.append(pcard(pid := pid + 1, f"{r} {j} - {110+i*3+j}/103", r, f"{110+i*3+j}/103", {"Holofoil": [3, 8, 6, 60, 400][i]}))
     for name, price in (("Delta Reign Booster Box", 230.0), ("Delta Reign Booster Box Case", 1340.0),
                         ("Delta Reign Elite Trainer Box", 106.0), ("Delta Reign Booster Bundle", 45.0),
-                        ("Delta Reign Booster Pack", 6.0), ("Delta Reign Pokemon Center Elite Trainer Box (Exclusive)", 295.0)):
+                        ("Delta Reign Booster Pack", 6.0), ("Delta Reign Pokemon Center Elite Trainer Box (Exclusive)", 295.0),
+                        ("Delta Reign Elite Trainer Box [Flareon/Jolteon/Umbreon/Leafeon/Glaceon/Vaporeon/Sylveon]", 547.0)):
         p, pr = sealed(pid := pid + 1, name, price)
         items.append((p, pr))
     me = {"group": {"groupId": 24831, "name": "ME06: Delta Reign", "abbreviation": "DLR", "publishedOn": "2026-08-06T00:00:00"},

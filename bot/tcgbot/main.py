@@ -1,4 +1,4 @@
-"""tcg-bot for Discord: Riftbound prices, box value, sealed tracker, watchlist alerts and collections."""
+"""Foil for Discord: Riftbound prices, box value, sealed tracker, watchlist alerts and collections."""
 from __future__ import annotations
 
 import asyncio
@@ -213,7 +213,7 @@ def register(bot: TcgBot):
     async def botstatus(interaction: discord.Interaction):
         games = ", ".join(f"{g['name']} ({g['sets']} sets)" for g in bot.store.games) or "not loaded"
         await interaction.response.send_message(
-            f"tcg-bot {__version__} · prices from {bot.store.price_date or 'not loaded'} · {games} · "
+            f"Foil {__version__} · prices from {bot.store.price_date or 'not loaded'} · {games} · "
             f"{len(bot.db.watches())} alerts set", ephemeral=True)
 
     # ---- watchlist

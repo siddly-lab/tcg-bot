@@ -1,4 +1,6 @@
-# tcg-bot
+# Foil
+
+The code lives in the `tcg-bot` repo.
 
 Trading card price tracker, booster box value analyzer, buy-timing tool and Discord bot. Covers Riftbound and Pokémon.
 

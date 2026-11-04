@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TCG Box Value</title>
-<meta name="description" content="Daily trading card prices, booster box value, pull odds, buy timing and sealed returns for Riftbound and Pokémon.">
+<title>Foil</title>
+<meta name="description" content="Foil: daily trading card prices, booster box value, pull odds, buy timing and sealed returns for Riftbound and Pokémon.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=__BUILD__">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <header class="top">
   <div class="wrap top-row">
-    <a class="brand" href="#/" aria-label="TCG Box Value home">
+    <a class="brand" href="#/" aria-label="Foil home">
       <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="5" y="7" width="15" height="21" rx="3" fill="var(--accent)" opacity=".35" transform="rotate(-10 12 17)"/><rect x="11" y="4" width="15" height="21" rx="3" fill="var(--accent)"/><path d="M15 15l3-5 3 5-3 5z" fill="var(--on-accent)"/></svg>
-      <span>TCG Box Value</span>
+      <span>Foil</span>
     </a>
     <div class="game-switch" id="games" role="tablist" aria-label="Game"></div>
     <button id="theme" class="icon-btn" aria-label="Switch light or dark mode" title="Light or dark mode">
@@ -35,6 +35,6 @@
 <main class="wrap" id="view" aria-live="polite"><p class="muted pad">Loading prices…</p></main>
 <footer class="wrap muted small">Prices from TCGplayer via tcgcsv.com, refreshed daily. <span id="stamp"></span> Not affiliated with Riot Games, The Pokémon Company or TCGplayer. Not financial advice.</footer>
 <div id="modal" class="modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Card details"><button class="icon-btn close" aria-label="Close">✕</button><div id="modal-body"></div></div></div>
-<script src="app.js"></script>
+<script src="app.js?v=__BUILD__"></script>
 </body>
 </html>
