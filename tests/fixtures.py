@@ -95,3 +95,43 @@ def pokemon_raw(date="2026-11-03"):
     promo = {"group": {"groupId": 1418, "name": "WoTC Promo", "abbreviation": "PR", "publishedOn": "1999-07-01T00:00:00"},
              "products": [pcard(9100, "Mewtwo - 3", "Promo", "3", {"Holofoil": 20})[0]], "prices": []}
     return {"category": 3, "fetched_at": f"{date}T21:00:00+00:00", "source_updated": None, "groups": [me, base, promo]}
+
+
+def onepiece_raw(date="2026-11-03"):
+    """A main OP set, named the way TCGplayer names One Piece products."""
+    def c(pid, name, rarity, number, prices):
+        prod = {"productId": pid, "name": name, "imageUrl": f"https://img/{pid}.jpg", "groupId": 3,
+                "url": f"https://www.tcgplayer.com/product/{pid}",
+                "extendedData": [{"name": "Rarity", "value": rarity}, {"name": "Number", "value": number}]}
+        return prod, [{"productId": pid, "lowPrice": v * 0.9, "midPrice": v, "highPrice": v * 2, "marketPrice": v,
+                       "directLowPrice": None, "subTypeName": sub} for sub, v in prices.items()]
+    items, pid = [], 7000
+    for i in range(20):
+        items.append(c(pid := pid + 1, f"Common {i}", "C", f"OP16-{i:03d}", {"Normal": 0.10}))
+    for i in range(10):
+        items.append(c(pid := pid + 1, f"Uncommon {i}", "UC", f"OP16-{i+30:03d}", {"Normal": 0.20}))
+    for i in range(10):
+        items.append(c(pid := pid + 1, f"Rare {i}", "R", f"OP16-{i+50:03d}", {"Foil": 0.50}))
+    for i in range(4):
+        items.append(c(pid := pid + 1, f"Leader ({i:03d})", "L", f"OP16-{i:03d}", {"Normal": 1.0}))
+    for i in range(6):
+        items.append(c(pid := pid + 1, f"Super Rare {i}", "SR", f"OP16-{i+70:03d}", {"Foil": 4.0}))
+    items.append(c(pid := pid + 1, "Portgas.D.Ace (118)", "SEC", "OP16-118", {"Foil": 30.0}))
+    items.append(c(pid := pid + 1, "Portgas.D.Ace (118) (Alternate Art)", "SEC", "OP16-118", {"Foil": 160.0}))
+    items.append(c(pid := pid + 1, "Marco (Alternate Art)", "R", "OP16-014", {"Foil": 20.0}))
+    items.append(c(pid := pid + 1, "Ms. All Sunday (SP)", "SR", "OP14-084", {"Foil": 480.0}))
+    items.append(c(pid := pid + 1, "Vista (TR)", "TR", "OP16-011", {"Foil": 300.0}))
+    items.append(c(pid := pid + 1, "Sakazuki (Manga)", "SR", "OP16-065", {"Foil": 1070.0}))
+    items.append(c(pid := pid + 1, "Rocks.D.Xebec (118) (Super Alternate Art)", "SEC", "OP17-118", {"Foil": 6100.0}))
+    items.append(c(pid := pid + 1, "DON!! Card (Alternate Art)", "DON!!", None, {"Foil": 5.0}))
+    for name, price in (("The Time of Battle Booster Box", 207.0), ("The Time of Battle Booster Box Case", 2458.0),
+                        ("The Time of Battle Booster Pack", 9.0), ("Double Pack Set Vol. 11 Display", 253.0)):
+        items.append(sealed(pid := pid + 1, name, price))
+    for p, _ in items:
+        if p["name"].startswith("DON!!"):
+            p["extendedData"] = [{"name": "Rarity", "value": "DON!!"}]
+    op = {"group": {"groupId": 24664, "name": "The Time of Battle", "abbreviation": "OP16", "publishedOn": "2026-06-12T00:00:00"},
+          "products": [p for p, _ in items], "prices": [x for _, pr in items for x in pr]}
+    st = {"group": {"groupId": 24678, "name": "ST-30: Starter Deck 30 EX Luffy & Ace", "abbreviation": "ST-30", "publishedOn": "2026-06-12T00:00:00"},
+          "products": [sealed(7900, "ST-30: Starter Deck 30 EX Luffy & Ace", 15.0)[0]], "prices": sealed(7900, "x", 15.0)[1]}
+    return {"category": 68, "fetched_at": f"{date}T21:00:00+00:00", "source_updated": None, "groups": [op, st]}

@@ -201,12 +201,13 @@ def sealed_summary(ctx: Ctx, p: dict, sset: dict, with_series: bool = False) -> 
            "buy_cost": cost, "packs": packs, "per_pack": round(cost / packs, 2) if cost and packs else None,
            "thin": thin_market(p), **st}
     release = sset.get("release")
+    if m:
+        sel = ctx.common["selling"]
+        out["net_if_sold"] = round(m * (1 - sel["sealed_fee_pct"]) - sel["sealed_ship_cost"], 2)
     if release and m and msrp:
         days = (dt.date.fromisoformat(ctx.today) - dt.date.fromisoformat(release)).days
         out["days_since_release"] = days
         out["annualized"] = round((m / msrp) ** (365 / days) - 1, 4) if days >= 90 else None
-        sel = ctx.common["selling"]
-        out["net_if_sold"] = round(m * (1 - sel["sealed_fee_pct"]) - sel["sealed_ship_cost"], 2)
         out["bench"] = market.compare(release, ctx.today, msrp, m, ctx.bench, ctx.common["benchmark"])
     if with_series:
         out["series"] = [[d, round(v, 2)] for d, v in ser]
@@ -262,7 +263,8 @@ def analyze_set(ctx: Ctx, sset: dict) -> tuple[dict, dict]:
         if c.get("bucket"):
             buckets.setdefault(c["bucket"], []).append(c)
     odds, ppb = {}, None
-    if tmpl and buckets.get("Common"):
+    base_bucket = next(iter(tmpl["slots"][0]["weights"])) if tmpl else None
+    if tmpl and buckets.get(base_bucket):
         detail["modeled"] = True
         ppb, bpc = tmpl["packs_per_box"], tmpl["boxes_per_case"]
         overrides = {s["name"]: sset["rare_printing"] for s in tmpl["slots"] if s["name"].startswith("Rare")} if sset.get("rare_printing") else {}

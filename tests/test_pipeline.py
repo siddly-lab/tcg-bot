@@ -23,9 +23,10 @@ def tmp_build(tmp_path, monkeypatch):
     return tmp_path
 
 
-def write_raw(tmp, rb=None, pk=None):
+def write_raw(tmp, rb=None, pk=None, op=None):
     (tmp / "raw" / "riftbound.json").write_text(json.dumps(rb or fixtures.raw()))
     (tmp / "raw" / "pokemon.json").write_text(json.dumps(pk or fixtures.pokemon_raw()))
+    (tmp / "raw" / "onepiece.json").write_text(json.dumps(op or fixtures.onepiece_raw()))
 
 
 def load(tmp, game, name):
@@ -139,7 +140,7 @@ def test_full_build_offline(cfg, tmp_build):
     write_raw(tmp_build)
     build.run(offline=True)
     games = load(tmp_build, "", "games.json") if False else json.loads((tmp_build / "out" / "games.json").read_text())
-    assert [g["id"] for g in games["games"]] == ["riftbound", "pokemon"]
+    assert [g["id"] for g in games["games"]] == ["riftbound", "pokemon", "onepiece"]
     s = load(tmp_build, "riftbound", "summary.json")
     sets = {x["code"]: x for x in s["sets"]}
     assert set(sets) == {"OGN"} and sets["OGN"]["modeled"]  # Legacy isn't out yet, so it's left off
@@ -204,7 +205,7 @@ def test_history_movers_and_zones(cfg, tmp_build):
         r = fixtures.raw(day)
         for pr in r["groups"][0]["prices"]:
             pr["marketPrice"] = pr["marketPrice"] * bump if pr["marketPrice"] else None
-        write_raw(tmp_build, rb=r, pk=fixtures.pokemon_raw(day))
+        write_raw(tmp_build, rb=r, pk=fixtures.pokemon_raw(day), op=fixtures.onepiece_raw(day))
         build.run(offline=True)
     s = load(tmp_build, "riftbound", "summary.json")
     assert s["history_days"] == 5 and s["movers"]["has_1d"]
@@ -223,3 +224,26 @@ def test_backfill_dates():
     d = backfill.dates_to_fetch(dt.date(2026, 1, 1), dt.date(2026, 2, 28), 10, {"2026-02-27"})
     assert d[0] == "2026-01-01" and "2026-01-08" in d and "2026-01-02" not in d
     assert "2026-02-26" in d and "2026-02-27" not in d and d[-1] == "2026-02-28"
+
+
+def test_onepiece_build(cfg, tmp_build):
+    from tcg.games import onepiece
+    assert onepiece.sealed_type("Romance Dawn - Booster Box (Wave 1 - Blue)") == "box"
+    assert onepiece.sealed_type("Double Pack Set Vol. 11 Display") == "other"
+    write_raw(tmp_build)
+    build.run(offline=True)
+    s = load(tmp_build, "onepiece", "summary.json")
+    assert [x["code"] for x in s["sets"]] == ["OP16"]  # starter decks aren't booster sets
+    d = load(tmp_build, "onepiece", "sets/OP16.json")
+    assert d["modeled"] and d["packs_per_box"] == 24 and d["boxes_per_case"] == 12
+    counts = d["card_counts"]
+    assert counts["Manga rares"] == 1 and counts["Treasure Rares"] == 1 and counts["SP cards"] == 1
+    assert counts["Secret Rare alternate arts"] == 1 and counts["Alternate arts"] == 1
+    assert counts["Super alternate arts and extras (odds unknown, left out)"] == 1
+    assert d["chase"][0]["name"] == "Rocks.D.Xebec (118) (Super Alternate Art)" and not d["chase"][0].get("boxes_per_hit")
+    manga = next(c for c in d["chase"] if c["name"] == "Sakazuki (Manga)")
+    assert manga["boxes_per_hit"] == pytest.approx(40, rel=0.05)
+    sr = next(h for h in d["hit_odds"] if h["bucket"] == "SR")
+    assert 6 < sr["per_box"] < 7.5
+    assert {w["kind"] for w in d["ways_to_buy"]} == {"box", "case", "pack"}
+    assert next(w for w in d["ways_to_buy"] if w["kind"] == "case")["packs"] == 288

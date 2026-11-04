@@ -2,7 +2,7 @@
 
 The code lives in the `tcg-bot` repo.
 
-Trading card price tracker, booster box value analyzer, buy-timing tool and Discord bot. Covers Riftbound and Pokémon.
+Trading card price tracker, booster box value analyzer, buy-timing tool and Discord bot. Covers Riftbound, Pokémon and One Piece.
 
 - **Dashboard:** https://siddly-lab.github.io/tcg-bot/ (rebuilt every day around 2:30pm Pacific)
 - **Discord bot:** `/price`, `/box`, `/sets`, `/sealed`, `/movers`, `/watch`, `/collection`, plus a daily price post

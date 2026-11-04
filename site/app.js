@@ -239,7 +239,8 @@ async function viewSet(v, sm, code){
         ${range(b.low90, b.high90, b.market, b.msrp)}
         <div class="kpis" style="grid-template-columns:1fr 1fr;margin-bottom:0">
           <div><div class="sub">You'd pay</div><b class="num">${money(b.buy_cost)}</b><div class="sub">cheapest listing + tax + shipping</div></div>
-          <div><div class="sub">vs MSRP ${money(b.msrp)}</div><b class="num">${pct(b.vs_msrp)}</b><div class="sub">${b.annualized != null ? pct(b.annualized) + " per year since release" : "per-year rate after 90 days"}</div></div>
+          ${b.msrp ? `<div><div class="sub">vs MSRP ${money(b.msrp)}</div><b class="num">${pct(b.vs_msrp)}</b><div class="sub">${b.annualized != null ? pct(b.annualized) + " per year since release" : "per-year rate after 90 days"}</div></div>`
+            : `<div><div class="sub">vs its 90-day low</div><b class="num">${pct(b.vs_low90)}</b><div class="sub">no MSRP on file for this set</div></div>`}
           <div><div class="sub">Last 30 days</div><b class="num">${chg(b.change_30d)}</b></div>
           <div><div class="sub">If you sold it</div><b class="num">${money(b.net_if_sold)}</b><div class="sub">after fees and shipping</div></div>
         </div>
