@@ -68,6 +68,13 @@ table.data a:hover{color:var(--accent)}
 .ov-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:16px}
 .ov-card dl{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:0;font-size:14px}
 .ov-card dt{color:var(--muted)}.ov-card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+img.thumb{cursor:zoom-in}
+#preview{position:fixed;z-index:50;display:none;pointer-events:none;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.28)}
+#preview.on{display:block}
+#preview img{display:block;width:300px;aspect-ratio:5/7;object-fit:contain;border-radius:10px;background:var(--line)}
+#preview.pinned{left:50%!important;top:50%!important;transform:translate(-50%,-50%);pointer-events:auto;box-shadow:0 0 0 100vmax rgba(0,0,0,.55)}
+#preview.pinned img{width:min(82vw,380px)}
 footer{padding:24px 16px 40px}
 @media (max-width:640px){
   h1{font-size:18px}.card .v{font-size:20px}.chart-box{height:260px}
