@@ -69,7 +69,9 @@ function art(src, cls = ""){
 function range(low, high, now, msrp){
   if (low == null || high == null || now == null) return '<span class="faint small">Building history</span>';
   const lo = Math.min(low, now), hi = Math.max(high, now), span = hi - lo || 1;
-  const at = v => (Math.max(0, Math.min(1, (v - lo) / span)) * 100).toFixed(1) + "%";
+  // keep the 12px dot and 2px MSRP mark fully inside the bar, even at the very ends
+  const f = v => Math.max(0, Math.min(1, (v - lo) / span));
+  const at = v => `calc(6px + (100% - 12px) * ${f(v).toFixed(4)})`;
   const msrpIn = msrp != null && msrp >= lo && msrp <= hi;
   const note = msrp != null && !msrpIn ? `<span class="faint">MSRP ${money(msrp)} is ${msrp < lo ? "below" : "above"} this range</span>` : "";
   return `<div class="range" title="Last 90 days: ${money(low)} to ${money(high)}${msrp ? `. MSRP ${money(msrp)}` : ""}">

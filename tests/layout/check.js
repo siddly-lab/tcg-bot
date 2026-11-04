@@ -101,7 +101,16 @@ async function check(page, label) {
   await browser.close();
   console.log(`Checked ${pages} pages at ${VIEWPORTS.length} screen sizes.`);
   if (problems.length) {
-    console.log(`\n${problems.length} layout problem(s):\n- ` + [...new Set(problems)].slice(0, 80).join("\n- "));
+    // group repeats so one kind of problem can't hide another
+    const groups = new Map();
+    for (const p of new Set(problems)) {
+      const i = p.indexOf(": ");
+      const what = p.slice(i + 2).replace(/\d+px/g, "Npx"), where = p.slice(0, i);
+      if (!groups.has(what)) groups.set(what, []);
+      groups.get(what).push(where);
+    }
+    console.log(`\n${problems.length} layout problem(s), ${groups.size} kind(s):`);
+    for (const [what, where] of groups) console.log(`- ${what}  [${where.length}x, e.g. ${where.slice(0, 3).join(" | ")}]`);
     process.exit(1);
   }
   console.log("No layout problems.");
