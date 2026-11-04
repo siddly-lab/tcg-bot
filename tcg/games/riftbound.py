@@ -18,14 +18,17 @@ LABELS = {
     "Common": "Commons", "Uncommon": "Uncommons", "Rare": "Rares", "Epic": "Epics",
     "Rune": "Runes", "RuneAlt": "Alternate-art runes", "Token": "Tokens",
     "AltArt": "Alternate arts", "Overnumbered": "Overnumbered", "Signature": "Signatures",
-    "Ultimate": "Ultimate", "Special": "Special art (odds unknown, left out)",
+    "Ultimate": "Ultimate", "Special": "Special versions with unknown odds (left out)",
 }
 
 
 RUNE_NAME = re.compile(r"^(Fury|Calm|Mind|Body|Chaos|Order) Rune\b")
 
 
-from . import ext  # noqa: E402
+from . import ext, has_unknown_label  # noqa: E402
+
+# Version labels whose odds we know. Anything else (for example "Heartsteel Overnumbered") is left out.
+KNOWN_LABELS = {"alternate art", "overnumbered", "signature", "ultimate", "full art"}
 
 
 def sealed_type(name: str) -> str:
@@ -97,6 +100,8 @@ def classify_card(p: dict) -> str | None:
     if rarity in (None, "None", "Promo"):
         return None
     if "special art" in low or re.match(r"^SP\d", number):
+        return "Special"
+    if has_unknown_label(name, KNOWN_LABELS):
         return "Special"
     if "signature" in low or number.endswith("*") or re.match(r"^\d+\*", number):
         return "Signature"

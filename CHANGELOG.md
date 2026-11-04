@@ -92,3 +92,24 @@
 - **No MSRP yet for One Piece.** I couldn't confirm an official English MSRP, so "vs MSRP", "per year" and the investment comparison stay blank for One Piece until one is added to `config/games/onepiece.json`. Buy labels still work from the 90-day history.
 - "If you sold it" now shows for every sealed product, MSRP or not.
 - On phones the game switcher gets its own row so three games fit.
+
+## 0.5.0 — guardrails and rip-or-hold
+
+**What was wrong** (found by a new audit of every set with a box value):
+- Cards with no recent sales were valued at their asking price, including placeholder asks like $9,999.99. That inflated One Piece OP-17 (one card was 57% of its box value), OP-09 (44%) and OP-05 (39%).
+- TCGplayer lists OP-14 and OP-15 together with Extra Booster EB-04, so about 49 EB-04 cards were counted as pulls from OP packs.
+- "Thin market" was really flagging falling prices, not few sales.
+- "You'd pocket" assumed you could sell at the last sale even when listings had dropped below it.
+- Pokémon "Enhanced" booster boxes and Romance Dawn's two box waves were picked by name length.
+
+**What changed:**
+1. Cards with no recent sales count at the typical sale price for their rarity in that set; asking prices of $9,999+ with no sales are ignored. Set pages list these cards.
+2. One Piece: a regular card only counts if it carries the set's own number; SP and Treasure Rare reprints still count.
+3. Riftbound and Pokémon get the strict label rule: any version label without known odds is left out (Radiance's Heartsteel Overnumbered and Signature cards are now left out until their odds are confirmed).
+4. Enhanced and half booster boxes are tracked as other sealed; when a set has several box versions, the cheapest is used and the rest stay listed.
+5. "You'd pocket" uses the lower of the last sale and the cheapest listing.
+6. New flags: "no recent sales" and "price falling", plus each set's share of box value from no-sale cards.
+7. A warning when one card is over 20% of a box's value.
+8. Daily checks before a box value is shown: counted cards carry the set's numbering, no unknown labels, no 30%+ overnight jump while the box price holds. A failing set shows "being checked" instead of a number.
+9. If TCGplayer's feed didn't refresh, no duplicate day is saved and the page says prices didn't update.
+10. New "Rip or hold?" table on every set with a box value: pack, box and case, with what you'd pay delivered, EV, EV after selling, return if you rip, chance a rip profits, and how the sealed product has moved over the last 12 months. The Discord bot's `/box` shows the same.

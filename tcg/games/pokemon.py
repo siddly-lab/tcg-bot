@@ -10,17 +10,20 @@ from __future__ import annotations
 
 import re
 
-from . import ext
+from . import ext, has_unknown_label
 
 PACK_BUCKETS = ("Common", "Uncommon", "Rare", "Double Rare", "Ultra Rare", "Illustration Rare",
                 "Special Illustration Rare", "Hyper Rare", "Mega Hyper Rare")
 LABELS = {b: b + "s" for b in PACK_BUCKETS}
-LABELS.update({"Common": "Commons", "Uncommon": "Uncommons", "Rare": "Rares"})
+LABELS.update({"Common": "Commons", "Uncommon": "Uncommons", "Rare": "Rares",
+               "Special": "Special versions with unknown odds (left out)"})
 BUCKET_PRINTING = {"Double Rare": "Holofoil", "Ultra Rare": "Holofoil", "Illustration Rare": "Holofoil",
                    "Special Illustration Rare": "Holofoil", "Hyper Rare": "Holofoil", "Mega Hyper Rare": "Holofoil"}
 
 SEALED_LABELS = {"box": "Booster box", "case": "Booster box case", "etb": "Elite Trainer Box", "bundle": "Booster bundle",
                  "pack": "Booster pack", "sleeved_pack": "Sleeved booster pack", "other": "Other sealed"}
+
+KNOWN_LABELS: set[str] = set()  # Pokémon pack cards carry no version labels; any label means unknown odds
 
 CARD_RARITIES = set(PACK_BUCKETS) | {"Holo Rare", "Secret Rare", "Shiny Rare", "Shiny Ultra Rare", "ACE SPEC Rare",
                                      "Rare Holo", "Amazing Rare", "Radiant Rare", "Rare BREAK", "Prism Rare",
@@ -33,7 +36,8 @@ def is_sealed(p: dict) -> bool:
 
 def sealed_type(name: str) -> str:
     n = name.lower()
-    if any(w in n for w in ("half booster box", "mini", "blister", "build & battle", "art bundle", "display")):
+    # "Enhanced Booster Box" and half boxes have different contents, so they're tracked as other sealed
+    if any(w in n for w in ("half booster box", "enhanced booster", "mini", "blister", "build & battle", "art bundle", "display")):
         return "other"
     if "booster box case" in n:
         return "case"
@@ -57,7 +61,8 @@ def card_name(name: str) -> str:
 def classify_card(p: dict) -> str | None:
     rarity = ext(p, "Rarity")
     if rarity in PACK_BUCKETS:
-        return rarity
+        # any version label (stamps, special prints) means odds we don't know
+        return "Special" if has_unknown_label(card_name(p.get("name") or ""), set()) else rarity
     return None
 
 

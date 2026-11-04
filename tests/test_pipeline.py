@@ -16,6 +16,7 @@ def cfg():
 
 @pytest.fixture()
 def tmp_build(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "STATE", tmp_path / "state.json")
     monkeypatch.setattr(build, "HIST", tmp_path / "hist")
     monkeypatch.setattr(build, "RAW", tmp_path / "raw")
     monkeypatch.setattr(build, "OUT", tmp_path / "out")
@@ -38,8 +39,8 @@ def test_classify_names_from_live_feed():
         return classify.classify_card({"name": name, "extendedData": [
             {"name": "Rarity", "value": rarity}, {"name": "Number", "value": number}]})
     assert b("Sett, The Boss (Signature)", "Showcase", "310*/298") == "Signature"
-    assert b("K'Sante, Courageous (Heartsteel Overnumbered)", "Showcase", "178/167") == "Overnumbered"
-    assert b("Kayn, Unleashed (Heartsteel Signature)", "Showcase", "182*/167") == "Signature"
+    assert b("K'Sante, Courageous (Heartsteel Overnumbered)", "Showcase", "178/167") == "Special"  # odds unconfirmed
+    assert b("Kayn, Unleashed (Heartsteel Signature)", "Showcase", "182*/167") == "Special"
     assert b("Packed Amphitheater (Ultimate)", "Showcase", "184/167") == "Ultimate"
     assert b("Jayce, Brilliant Inventor (Alternate Art)", "Epic", "068a/166") == "AltArt"
     assert b("Calm Rune", "Common", "R02") == "Rune"
@@ -256,3 +257,113 @@ def test_onepiece_build(cfg, tmp_build):
     assert 6 < sr["per_box"] < 7.5
     assert {w["kind"] for w in d["ways_to_buy"]} == {"box", "case", "pack"}
     assert next(w for w in d["ways_to_buy"] if w["kind"] == "case")["packs"] == 288
+
+
+# ---------------------------------------------------------------- guardrails
+
+def test_placeholder_listing_never_drives_box_value(cfg, tmp_build):
+    r = fixtures.onepiece_raw()
+    g = r["groups"][0]
+    manga = next(p for p in g["products"] if "(Manga)" in p["name"])
+    for pr in g["prices"]:
+        if pr["productId"] == manga["productId"]:
+            pr["marketPrice"] = None
+            pr["lowPrice"] = 29994.99  # an asking price nobody has paid
+    write_raw(tmp_build, op=r)
+    build.run(offline=True)
+    d = load(tmp_build, "onepiece", "sets/OP16.json")
+    flagged = {f["name"]: f for f in d["no_sale_cards"]}
+    assert "Sakazuki (Manga)" in flagged and flagged["Sakazuki (Manga)"]["used"] < 100
+    assert d["ev"]["box_sticker"] < 400
+    row = next(c for c in d["cards"] if c["name"] == "Sakazuki (Manga)")
+    assert row["no_sale"] and (row["price"] or 0) < 9999
+
+
+def test_onepiece_cards_from_another_product_are_not_counted(cfg, tmp_build):
+    r = fixtures.onepiece_raw()
+    g = r["groups"][0]
+    p, pr = fixtures.card(7600, "Stowaway Rare", "R", "EB04-010", None, 50.0)
+    p["groupId"] = g["group"]["groupId"]
+    g["products"].append(p); g["prices"].extend(pr)
+    sp, spr = fixtures.card(7601, "Old Reprint (OP14-084) (SP)", "SR", "OP14-084", None, 300.0)
+    g["products"].append(sp); g["prices"].extend(spr)
+    write_raw(tmp_build, op=r)
+    build.run(offline=True)
+    d = load(tmp_build, "onepiece", "sets/OP16.json")
+    stow = next(c for c in d["cards"] if c["name"] == "Stowaway Rare")
+    assert stow["other_set"] == "EB04" and not stow.get("boxes_per_hit")
+    reprint = next(c for c in d["cards"] if c["name"] == "Old Reprint (OP14-084) (SP)")
+    assert reprint.get("boxes_per_hit")  # SP reprints really are pulled from this set's packs
+
+
+def test_cheapest_variant_box_and_enhanced_boxes(cfg, tmp_build):
+    r = fixtures.raw()
+    g = r["groups"][0]
+    p, pr = fixtures.sealed(1990, "Origins - Booster Display (Wave 1 - Blue)", 4299.0)
+    g["products"].append(p); g["prices"].extend(pr)
+    write_raw(tmp_build, rb=r)
+    build.run(offline=True)
+    o = load(tmp_build, "riftbound", "sets/OGN.json")
+    box = next(x for x in o["sealed"] if x["id"] == o["canonical"]["box"])
+    assert box["market"] == 150.0
+    assert pokemon.sealed_type("Journey Together Enhanced Booster Box") == "other"
+
+
+def test_sell_side_uses_lower_of_sale_and_listing(cfg):
+    card = {"prices": {"Foil": {"market": 100.0, "low": 60.0}}}
+    assert ev.sell_price(card, "Foil") == 60.0
+    assert ev.price_of(card, "Foil") == 100.0
+
+
+def test_rip_or_hold_and_flags(cfg, tmp_build):
+    write_raw(tmp_build)
+    build.run(offline=True)
+    o = load(tmp_build, "riftbound", "sets/OGN.json")
+    kinds = {r["kind"]: r for r in o["rip_or_hold"]}
+    assert set(kinds) == {"pack", "box", "case"}
+    box = kinds["box"]
+    assert box["packs"] == 24 and box["ev_net"] < box["ev"]
+    assert box["rip_return"] == pytest.approx(box["ev_net"] / box["pay"] - 1, abs=1e-3)
+    assert 0 <= kinds["pack"]["chance_profit"] <= 1 and 0 <= kinds["case"]["chance_profit"] <= 1
+    assert "concentration" not in o  # no single Origins card is over 20% of a box
+    assert "checks" in o and o["checks"] == []
+    op = load(tmp_build, "onepiece", "sets/OP16.json")
+    assert op["concentration"]["name"] == "Ms. All Sunday (SP)" and op["concentration"]["share"] > 0.2
+
+
+def test_gate_holds_box_value_on_overnight_jump(cfg, tmp_build):
+    write_raw(tmp_build, rb=fixtures.raw("2026-11-02"))
+    build.run(offline=True)
+    r = fixtures.raw("2026-11-03")
+    for pr in r["groups"][0]["prices"]:
+        if pr["productId"] not in (1035, 1036, 1037, 1038) and pr["marketPrice"]:
+            pr["marketPrice"] *= 3  # every card triples overnight, the box doesn't move
+    write_raw(tmp_build, rb=r)
+    build.run(offline=True)
+    s = load(tmp_build, "riftbound", "summary.json")
+    og = next(x for x in s["sets"] if x["code"] == "OGN")
+    assert og["ev"] is None and "box value moved" in og["ev_hold"][0]
+    assert s["held_sets"][0]["code"] == "OGN"
+
+
+def test_stale_feed_is_not_saved_as_a_new_day(cfg, tmp_build):
+    a = fixtures.raw("2026-11-02"); a["source_updated"] = "2026-11-02T20:00:00"
+    write_raw(tmp_build, rb=a)
+    build.run(offline=True)
+    b = fixtures.raw("2026-11-03"); b["source_updated"] = "2026-11-02T20:00:00"
+    write_raw(tmp_build, rb=b)
+    build.run(offline=True)
+    s = load(tmp_build, "riftbound", "summary.json")
+    assert s["stale_since"] == "2026-11-02"
+    assert sorted(p.name for p in (tmp_build / "hist" / "riftbound").glob("*.json.gz")) == ["2026-11-02.json.gz"]
+
+
+def test_no_sale_card_never_valued_above_its_ask(cfg):
+    buckets = {"Signature": [
+        {"id": 1, "name": "A", "prices": {"Foil": {"market": 800.0, "low": 700.0}}},
+        {"id": 2, "name": "B", "prices": {"Foil": {"market": 900.0, "low": 850.0}}},
+        {"id": 3, "name": "C", "prices": {"Foil": {"market": None, "low": 445.0}}},
+    ], "Special": [{"id": 4, "name": "D", "prices": {"Foil": {"market": None, "low": 5000.0}}}]}
+    slots = [{"name": "Foil", "count": 1, "printing": "Foil", "weights": {"Signature": 1.0}, "upgrades": ["Signature"]}]
+    out, flagged = build.ev_ready(buckets, slots, {"Signature": "Foil"})
+    assert [f["name"] for f in flagged] == ["C"] and flagged[0]["used"] == 445.0

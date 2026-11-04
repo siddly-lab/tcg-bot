@@ -11,6 +11,7 @@ import datetime as dt
 import json
 import math
 import re
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -24,6 +25,8 @@ HIST = ROOT / "data" / "history"
 RAW = ROOT / "data" / "raw"
 OUT = ROOT / "site" / "data"
 MAIN_KINDS = ("box", "case", "etb", "bundle", "pack")
+PLACEHOLDER = 9999  # asking prices at or above this, with no sales, are treated as placeholders
+STATE = ROOT / "data" / "state.json"
 
 
 def load_config() -> tuple[dict, list[dict]]:
@@ -68,8 +71,10 @@ def shape(raw: dict, gcfg: dict, mod) -> tuple[dict[int, dict], list[dict], list
             continue
         prices: dict[int, dict] = {}
         for p in g["prices"]:
-            prices.setdefault(p["productId"], {})[p.get("subTypeName") or "Normal"] = {
-                "market": p.get("marketPrice"), "low": p.get("lowPrice")}
+            m, low = p.get("marketPrice"), p.get("lowPrice")
+            if low and low >= PLACEHOLDER and not m:
+                low = None  # a $9,999.99-style asking price with no sales behind it is not a price
+            prices.setdefault(p["productId"], {})[p.get("subTypeName") or "Normal"] = {"market": m, "low": low}
         for p in g["products"]:
             rec = {"id": p["productId"], "name": mod.card_name(p["name"]), "group": grp["name"], "set": sset["code"],
                    "number": _ext(p, "Number"), "rarity": _ext(p, "Rarity"), "url": p.get("url"),
@@ -81,6 +86,8 @@ def shape(raw: dict, gcfg: dict, mod) -> tuple[dict[int, dict], list[dict], list
                 rec["name"] = p["name"].strip()
             else:
                 rec["bucket"] = mod.classify_card(p)
+                if hasattr(mod, "set_check"):
+                    mod.set_check(rec, sset)
             products[rec["id"]] = rec
     fill_missing_images(products)
     return products, sets, unknown
@@ -147,12 +154,43 @@ def with_prices(cards: list[dict], snap: dict) -> list[dict]:
     return out
 
 
-def thin_market(p: dict) -> bool:
-    for v in p["prices"].values():
-        m, low = v.get("market"), v.get("low")
-        if m and low and 0.6 <= low / m <= 1.6:
-            return False
-    return True
+def no_sale(p: dict) -> bool:
+    """No recent sale on any printing: the price shown is only what sellers are asking."""
+    return not any((v or {}).get("market") for v in p["prices"].values())
+
+
+def falling(p: dict) -> bool:
+    """The cheapest listing is well under the last sale price, which usually means the price is dropping."""
+    m, low, _ = best(p)
+    return bool(m and low and low < 0.75 * m)
+
+
+def ev_ready(buckets: dict[str, list], slots, bp) -> tuple[dict[str, list], list[dict]]:
+    """Copy of the buckets where cards with no recent sales are valued at the typical (median) sale price
+    of their rarity in the set, so one unsold asking price can't drive a box's value."""
+    out, flagged = {}, []
+    in_packs = {b for sl in slots for b in sl["weights"]}
+    for b, cards in buckets.items():
+        if b not in in_packs:
+            out[b] = cards  # not part of the box math anyway
+            continue
+        pr = None
+        for sl in slots:
+            if b in sl["weights"]:
+                pr = bp.get(b) if b in sl.get("upgrades", []) else sl["printing"]
+                break
+        sold = [ev.price_of(c, pr) for c in cards if not no_sale(c)]
+        med = statistics.median(sold) if sold else 0.0
+        new = []
+        for c in cards:
+            if no_sale(c):
+                asking = ev.price_of(c, pr) or None
+                used = min(asking, med) if asking and med else (med or asking or 0.0)  # never above its own asking price
+                flagged.append({"id": c["id"], "name": c["name"], "asking": asking, "used": round(used, 2)})
+                c = {**c, "prices": {sub: {"market": used, "low": None} for sub in (c["prices"] or {pr or "Normal": None})}}
+            new.append(c)
+        out[b] = new
+    return out, flagged
 
 
 def best(p: dict | None) -> tuple[float | None, float | None, str | None]:
@@ -199,7 +237,7 @@ def sealed_summary(ctx: Ctx, p: dict, sset: dict, with_series: bool = False) -> 
            "market": m, "low": low, "msrp": msrp, "vs_msrp": roi(m, msrp), "presale": p.get("presale"),
            "change_7d": ctx.chg(p["id"], sub, m, 7), "change_30d": ctx.chg(p["id"], sub, m, 30),
            "buy_cost": cost, "packs": packs, "per_pack": round(cost / packs, 2) if cost and packs else None,
-           "thin": thin_market(p), **st}
+           "no_sale": no_sale(p), "falling": falling(p), **st}
     release = sset.get("release")
     if m:
         sel = ctx.common["selling"]
@@ -215,8 +253,10 @@ def sealed_summary(ctx: Ctx, p: dict, sset: dict, with_series: bool = False) -> 
 
 
 def canonical(products, code, kind):
+    """The product used for a set's box (case, pack...). When there are several (Romance Dawn's two box waves),
+    use the cheapest, since that's the one you'd buy to open; the others stay listed with the set's sealed products."""
     c = [p for p in products.values() if p["set"] == code and p.get("sealed") == kind and best(p)[0]]
-    return min(c, key=lambda p: (len(p["name"]), p["id"])) if c else None
+    return min(c, key=lambda p: (best(p)[0], p["id"])) if c else None
 
 
 def card_row(ctx: Ctx, c: dict, odds: dict, ppb: int | None, with_series=False) -> dict:
@@ -225,7 +265,8 @@ def card_row(ctx: Ctx, c: dict, odds: dict, ppb: int | None, with_series=False) 
     st = market.stats(ser, ctx.today, m, None, ctx.common["zones"])
     row = {"id": c["id"], "set": c["set"], "name": c["name"], "number": c["number"], "rarity": c["rarity"],
            "kind": ctx.mod.LABELS.get(c.get("bucket"), c.get("rarity") or ""), "url": c["url"], "image": c["image"],
-           "standin": bool(c.get("image_standin")), "thin": thin_market(c), "price": m, "printing": sub,
+           "standin": bool(c.get("image_standin")), "no_sale": no_sale(c), "falling": falling(c),
+           "other_set": c.get("other_set"), "price": m, "printing": sub,
            "zone": st["zone"], "zone_label": st.get("zone_label"), "low90": st["low90"], "high90": st["high90"],
            "prices": {s: {"market": v.get("market"), "low": v.get("low"), "d7": ctx.chg(c["id"], s, v.get("market"), 7),
                           "d30": ctx.chg(c["id"], s, v.get("market"), 30)} for s, v in c["prices"].items()}}
@@ -270,7 +311,8 @@ def analyze_set(ctx: Ctx, sset: dict) -> tuple[dict, dict]:
         overrides = {s["name"]: sset["rare_printing"] for s in tmpl["slots"] if s["name"].startswith("Rare")} if sset.get("rare_printing") else {}
         slots = ev.build_slots(tmpl, {k: len(v) for k, v in buckets.items()}, overrides)
         bp = getattr(ctx.mod, "BUCKET_PRINTING", {})
-        vals = ev.slot_values(slots, buckets, selling, bp)
+        ev_buckets, no_sale_cards = ev_ready(buckets, slots, bp)
+        vals = ev.slot_values(slots, ev_buckets, selling, bp)
         e = ev.expected(slots, vals)
         box_price = (box_row or {}).get("market")
         msrp = (sset.get("msrp") or {}).get("box")
@@ -293,10 +335,19 @@ def analyze_set(ctx: Ctx, sset: dict) -> tuple[dict, dict]:
         detail["open_vs_hold"] = {"open_net_avg": round(bn, 2), "open_net_typical": sim["net"]["median"],
                                   "sell_sealed_net": round(hold, 2) if hold else None,
                                   "verdict": verdict(bn, sim["net"]["median"], hold)}
-        # how much of a box's value rides on its ten most valuable cards
-        per_card = sorted(((odds.get(c["id"], 0) * ppb * ev.price_of(c, slot_printing(c, slots, bp)), c["id"]) for c in cards if c["id"] in odds), reverse=True)
-        detail["top10_share"] = round(sum(v for v, _ in per_card[:10]) / bs, 4) if bs else None
+        # how much of a box's value rides on its most valuable cards, and on cards with no recent sales
+        ev_cards = [c for v in ev_buckets.values() for c in v]
+        per_card = sorted(((odds.get(c["id"], 0) * ppb * ev.price_of(c, slot_printing(c, slots, bp)), c["id"], c["name"])
+                           for c in ev_cards if c["id"] in odds), reverse=True)
+        detail["top10_share"] = round(sum(v for v, _, _ in per_card[:10]) / bs, 4) if bs else None
+        if per_card and bs and per_card[0][0] / bs > 0.2:
+            detail["concentration"] = {"name": per_card[0][2], "share": round(per_card[0][0] / bs, 3)}
+        flagged_ids = {f["id"] for f in no_sale_cards}
+        detail["no_sale_share"] = round(sum(v for v, i, _ in per_card if i in flagged_ids) / bs, 4) if bs else 0
+        detail["no_sale_cards"] = sorted(no_sale_cards, key=lambda f: -(f["asking"] or 0))[:12]
         detail["ev_series"] = ev_series(ctx, slots, buckets, selling, bp, ppb, box_row)
+        detail["rip_or_hold"] = rip_or_hold(ctx, slots, vals, e, ppb, bpc, canon_rows, sim, f"{gcfg['id']}-{code}-{ctx.today}")
+        detail["checks"] = checks(ctx, sset, buckets, detail)
     # chase cards: most valuable cards in the set, with buy-vs-pull when odds are known
     rows = [card_row(ctx, c, odds, ppb, with_series=True) for c in cards]
     rows.sort(key=lambda r: -(r["price"] or 0))
@@ -308,6 +359,9 @@ def analyze_set(ctx: Ctx, sset: dict) -> tuple[dict, dict]:
             r["pull_cost"] = round(max(pull, 0), 2)
             r["pull_boxes"] = round(n, 1)
     detail["chase"] = rows[:25]
+    held = bool(detail.get("checks"))
+    if held:
+        detail["ev_hold"] = detail["checks"]
     detail["cards"] = [{k: v for k, v in r.items() if k != "series"} | ({"series": r["series"]} if (r["price"] or 0) >= 1 else {})
                        for r in rows]
     summary = {
@@ -317,7 +371,8 @@ def analyze_set(ctx: Ctx, sset: dict) -> tuple[dict, dict]:
         "hero": hero_summary(hero, sset) if hero else None,
         "ev": {"box_sticker": detail["ev"]["box_sticker"], "box_net": detail["ev"]["box_net"],
                "median": detail["sim"]["net"]["median"], "beat_market": detail["sim"]["net"]["beat_market"],
-               "verdict": detail["open_vs_hold"]["verdict"], "top10_share": detail.get("top10_share")} if detail["modeled"] else None,
+               "verdict": detail["open_vs_hold"]["verdict"], "top10_share": detail.get("top10_share")} if detail["modeled"] and not held else None,
+        "ev_hold": detail.get("ev_hold"),
         "chase_top": [{k: r.get(k) for k in ("id", "name", "price", "image", "zone", "zone_label", "low90", "boxes_per_hit", "url")}
                       for r in rows[:8]],
     }
@@ -356,12 +411,96 @@ def ev_series(ctx, slots, buckets, selling, bp, ppb, box_row):
     for d in sorted(ctx.hist):
         if d > ctx.today:
             continue
-        hb = {k: with_prices(v, ctx.hist[d]) for k, v in buckets.items()}
+        hb, _ = ev_ready({k: with_prices(v, ctx.hist[d]) for k, v in buckets.items()}, slots, bp)
         he = ev.expected(slots, ev.slot_values(slots, hb, selling, bp))
         bm = None
         if box_row:
             bm = history.market(ctx.hist[d].get(history.key(box_row["id"], "Normal")))
         out.append([d, round(he["sticker"] * ppb, 2), round(he["net"] * ppb, 2), bm])
+    return out
+
+
+def hold_return(row: dict | None, today: str) -> dict | None:
+    """How the sealed product's price moved over (up to) the last 12 months."""
+    ser = (row or {}).get("series") or []
+    if len(ser) < 2 or not row.get("market"):
+        return None
+    start = (dt.date.fromisoformat(today) - dt.timedelta(days=365)).isoformat()
+    first = next(((d, v) for d, v in ser if d >= start), None)
+    if not first or not first[1]:
+        return None
+    days = (dt.date.fromisoformat(today) - dt.date.fromisoformat(first[0])).days
+    if days < 14:
+        return None
+    ret = row["market"] / first[1] - 1
+    return {"since": first[0], "days": days, "change": round(ret, 4),
+            "per_year": round((1 + ret) ** (365 / days) - 1, 4) if days >= 90 else None}
+
+
+def rip_or_hold(ctx, slots, vals, e, ppb, bpc, canon_rows, box_sim, seed) -> list[dict]:
+    """For a pack, a box and a case: what you'd pay, what's inside, the return if you open it, and how holding sealed has done."""
+    out = []
+    for kind, packs in (("pack", 1), ("box", ppb), ("case", ppb * bpc)):
+        r = canon_rows.get(kind)
+        if not r or not r.get("buy_cost"):
+            continue
+        pay = r["buy_cost"]
+        ev_s, ev_n = e["sticker"] * packs, e["net"] * packs
+        if kind == "box":
+            chance = shareish(box_sim["net"]["quantiles"], pay)
+        else:
+            n = 20000 if kind == "pack" else 2000
+            sim = ev.simulate(slots, vals, packs, boxes=n, seed=f"{seed}-{kind}")
+            chance = round(float((sim["net"] >= pay).mean()), 4)
+        out.append({"kind": kind, "label": r["kind_label"], "packs": packs, "pay": pay, "ev": round(ev_s, 2), "ev_net": round(ev_n, 2),
+                    "rip_return": round(ev_n / pay - 1, 4), "chance_profit": chance, "hold": hold_return(r, ctx.today),
+                    "sell_now": r.get("net_if_sold")})
+    return out
+
+
+def shareish(q: list[float], x: float) -> float:
+    n = len(q) - 1
+    if x <= q[0]:
+        return 1.0
+    if x > q[-1]:
+        return 0.0
+    for i in range(1, n + 1):
+        if q[i] >= x:
+            f = 0 if q[i] == q[i - 1] else (x - q[i - 1]) / (q[i] - q[i - 1])
+            return round(1 - (i - 1 + f) / n, 4)
+    return 0.0
+
+
+def checks(ctx, sset, buckets, detail) -> list[str]:
+    """Hard checks before a box value is shown. Any failure hides that set's box value with a note."""
+    out = []
+    counted = [c for v in buckets.values() for c in v if c.get("bucket") in ctx.mod.PACK_BUCKETS]
+    # every counted card must carry the set's own numbering
+    dens = {}
+    for c in counted:
+        m = re.match(r"^[A-Za-z]*\d+[a-z*]?/(\d+)$", (c.get("number") or "").strip())
+        if m:
+            dens[m.group(1)] = dens.get(m.group(1), 0) + 1
+    if dens:
+        main = max(dens, key=dens.get)
+        odd = sum(v for k, v in dens.items() if k != main)
+        if odd > max(2, 0.02 * len(counted)):
+            out.append(f"{odd} counted cards are numbered for a different set (this set uses /{main})")
+    # no counted card may carry a label we don't have odds for
+    known = getattr(ctx.mod, "KNOWN_LABELS", None)
+    if known is not None:
+        from .games import has_unknown_label
+        bad = [c["name"] for c in counted if has_unknown_label(c["name"], known)]
+        if bad:
+            out.append(f"{len(bad)} counted cards have a label with unknown odds, e.g. {bad[0]}")
+    # a box value that jumps overnight while the box price barely moves is more likely bad data than news
+    ser = detail.get("ev_series") or []
+    if len(ser) >= 2 and ser[-2][1] and ser[-1][0] == ctx.today:
+        jump = ser[-1][1] / ser[-2][1] - 1
+        bm0, bm1 = ser[-2][3], ser[-1][3]
+        box_move = abs(bm1 / bm0 - 1) if bm0 and bm1 else 0
+        if abs(jump) > 0.30 and box_move < 0.10:
+            out.append(f"box value moved {jump:+.0%} since the last update while the box price moved {box_move:.0%}")
     return out
 
 
@@ -445,7 +584,9 @@ def run_game(common, gcfg, raw, bench, out_dir: Path, do_backfill: bool) -> dict
                           HIST, dt.date.fromisoformat(today) - dt.timedelta(days=1))
         except Exception as e:
             print("history backfill skipped:", e)
-    history.write_snapshot(hist_dir, today, snapshot_of(products, keep))
+    stale = is_stale(gcfg["id"], raw, today)
+    if not stale:
+        history.write_snapshot(hist_dir, today, snapshot_of(products, keep))
     # Unreleased sets keep building price history but stay off the dashboard until release day.
     sets = [s for s in sets if (s.get("release") or "9999") <= today]
     live = {s["code"] for s in sets}
@@ -478,7 +619,8 @@ def run_game(common, gcfg, raw, bench, out_dir: Path, do_backfill: bool) -> dict
                "group_by": gcfg.get("group_by", "year"), "selling": common["selling"], "buying": common["buying"],
                "zones": common["zones"], "benchmark_tax": common["benchmark"], "packs": gcfg["packs"],
                "sets": summaries, "sealed": sealed_rows, "movers": movers(ctx, set_names),
-               "today": today_view(summaries, sealed_rows, details, today, unknown), "new_sets": unknown}
+               "today": today_view(summaries, sealed_rows, details, today, unknown), "new_sets": unknown,
+               "stale_since": stale, "held_sets": [{"code": d["code"], "name": d["name"], "why": d["ev_hold"]} for d in details if d.get("ev_hold")]}
     gdir = out_dir / gcfg["id"]
     (gdir / "sets").mkdir(parents=True, exist_ok=True)
     for d in details:
@@ -487,6 +629,24 @@ def run_game(common, gcfg, raw, bench, out_dir: Path, do_backfill: bool) -> dict
     (gdir / "cards.json").write_text(json.dumps(card_index, separators=(",", ":")))
     report(gcfg, summary, details, products, len(odds_index))
     return summary
+
+
+def is_stale(game: str, raw: dict, today: str) -> str | None:
+    """If TCGplayer's feed hasn't refreshed since the last saved day, don't save a copy under a new date.
+    Returns the date of the last real update when stale."""
+    try:
+        state = json.loads(STATE.read_text()) if STATE.exists() else {}
+    except Exception:
+        state = {}
+    prev = state.get(game) or {}
+    src = raw.get("source_updated")
+    if src and prev.get("source_updated") == src and prev.get("price_date") and prev["price_date"] < today:
+        return prev["price_date"]
+    if src:
+        state[game] = {"source_updated": src, "price_date": today}
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        STATE.write_text(json.dumps(state, indent=1))
+    return None
 
 
 def report(gcfg, summary, details, products, n_odds):
@@ -503,6 +663,15 @@ def report(gcfg, summary, details, products, n_odds):
         print("  chase", [(c['name'], c['price'], c.get('boxes_per_hit'), c.get('pull_cost')) for c in d["chase"][:4]])
         print("  ways", [(w['label'], w['per_pack']) for w in d["ways_to_buy"]])
     print("today:", {k: len(v) for k, v in summary["today"].items()})
+    for h in summary["held_sets"]:
+        print(f"BOX VALUE HELD for {h['name']}: {h['why']}")
+    for d in details:
+        if d.get("no_sale_cards"):
+            print(f"{d['name']}: {len(d['no_sale_cards'])} no-sale cards valued at their rarity's typical price, e.g. {d['no_sale_cards'][:2]}")
+        if d.get("concentration"):
+            print(f"{d['name']}: {d['concentration']['name']} is {d['concentration']['share']:.0%} of box value")
+    if summary.get("stale_since"):
+        print(f"STALE: TCGplayer feed not updated since {summary['stale_since']}")
     unb = [p["name"] for p in products.values() if not p.get("sealed") and not p.get("bucket")]
     print(f"cards outside pack math: {len(unb)} e.g. {unb[:12]}")
 

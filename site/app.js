@@ -12,6 +12,10 @@ const fmtDate = d => d ? new Date(d + "T12:00").toLocaleDateString(undefined, {m
 const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const SOURCE = {official: '<span class="chip good plain">Publisher</span>', community: '<span class="chip warn plain">Community estimate</span>', assumed: '<span class="chip bad plain">Our assumption</span>'};
 const ZONE = {good_msrp: "good", good_low: "good", normal: "", high: "bad", new: "plain"};
+// "no recent sales": the price is only what sellers ask. "price falling": listings are well under the last sale.
+const flags = c => (c.no_sale ? ' <span class="chip warn plain" title="No recent sales: the price shown is only what sellers are asking">no recent sales</span>' : "")
+  + (c.falling && !c.no_sale ? ' <span class="chip plain" title="The cheapest listing is well under the last sale, so the price is probably dropping">price falling</span>' : "")
+  + (c.other_set ? ` <span class="chip plain" title="Carries ${esc(c.other_set)} numbering, so it isn't counted in this set's box value">${esc(c.other_set)} card</span>` : "");
 const zoneChip = (z, label) => z ? `<span class="chip ${ZONE[z] ?? ""}">${esc(label || z)}</span>` : "";
 const quietChip = (z, label) => z && z !== "normal" ? zoneChip(z, label) + '<div style="height:6px"></div>' : "";
 
@@ -131,7 +135,9 @@ async function render(){
   const v = $("#view");
   try {
     const sm = await summary(r.game);
-    $("#stamp").textContent = `${sm.name} prices from ${fmtDate(sm.price_date)}.`;
+    $("#stamp").textContent = `${sm.name} prices from ${fmtDate(sm.stale_since || sm.price_date)}.`;
+    $("#stale")?.remove();
+    if (sm.stale_since) $("#view").insertAdjacentHTML("beforebegin", `<div id="stale" class="wrap"><div class="alert">⚠️ TCGplayer's prices didn't update today. Everything here is from ${fmtDate(sm.stale_since)}.</div></div>`);
     document.title = `${sm.name} · Foil`;
     const views = {today: viewToday, sets: viewSets, set: viewSet, sealed: viewSealed, cards: viewCards, card: viewCards, movers: viewMovers, how: viewHow};
     await (views[r.view] || viewToday)(v, sm, r.param);
@@ -189,7 +195,7 @@ async function viewSets(v, sm){
   const tile = s => {
     const h = s.hero || {};
     return `<a class="settile" href="${href("set", s.code)}"><div class="art">${art(s.image)}
-        ${!s.released ? '<span class="chip info plain badge">Pre-order</span>' : s.modeled ? '<span class="chip plain badge">Box value</span>' : ""}</div>
+        ${!s.released ? '<span class="chip info plain badge">Pre-order</span>' : s.ev ? '<span class="chip plain badge">Box value</span>' : s.ev_hold ? '<span class="chip warn plain badge">Being checked</span>' : ""}</div>
       <div class="body"><div class="t">${setHTML(s.name, s.code, s.year)}</div><div class="meta">${esc(s.code)} · ${fmtDate(s.release)}</div>
       ${h.zone && h.zone !== "new" && h.zone !== "normal" ? `<div>${zoneChip(h.zone, h.zone_label)}</div>` : ""}
       <div class="row"><div><div class="price">${money(h.market ?? h.low)}</div><div class="meta">${esc(h.kind_label || "")}</div></div>${spark(h.spark)}</div></div></a>`;
@@ -251,7 +257,8 @@ async function viewSet(v, sm, code){
       <div><h3>Cheapest way to get packs</h3><div id="ways"></div><p class="note">Includes tax and shipping. Elite Trainer Boxes also come with sleeves, dice and other extras, so their per-pack cost looks higher.</p></div>
       <div><h3>Compared with other places for the money</h3>${benchHTML(bench, sm)}</div>
     </div>
-    ${d.modeled ? openingHTML(d, b) : `<h2>Opening value</h2><div class="panel pad-in muted">There's no reliable pack data for this set, so it gets buy timing and card prices but no box value.</div>`}
+    ${d.ev_hold ? `<h2>Is it worth opening?</h2><div class="alert">⚠️ <div><b>This set's box value is being checked</b> and is hidden until it passes: ${d.ev_hold.map(esc).join("; ")}. Prices and buy timing above are unaffected.</div></div>`
+      : d.modeled ? ripHoldHTML(d) + openingHTML(d, b) : `<h2>Opening value</h2><div class="panel pad-in muted">There's no reliable pack data for this set, so it gets buy timing and card prices but no box value.</div>`}
     <h2>Chase cards</h2>
     <p class="note">The most valuable cards in the set. "Pull it" is what you'd expect to spend opening boxes until you hit that exact card, after selling everything else you pull.</p>
     <div id="chase"></div>
@@ -278,7 +285,7 @@ async function viewSet(v, sm, code){
     {key: "pp", label: "Per pack", num: 1, html: (w, i) => `<b>${money(w.per_pack)}</b>`},
   ], {empty: "No sealed prices yet."});
 
-  if (d.modeled) setupOpening(d, b);
+  if (d.modeled && !d.ev_hold){ setupOpening(d, b); setupRipHold(d); }
   table($("#chase"), d.chase, chaseCols(d), {onRow: c => openCard(sm.game, c.id, d.code, d), page: 12});
   table($("#sealed-list"), d.sealed, sealedCols(sm, false), {sort: "price"});
 }
@@ -292,6 +299,29 @@ function benchHTML(bench, sm){
     ${bench.spy != null ? row("S&amp;P 500 index fund", bench.spy, bench.after_tax.spy) : ""}
     ${bench.tbill != null ? row("Treasury bills", bench.tbill, bench.after_tax.tbill) : ""}</tbody></table></div>
     <p class="note">Sealed is valued at today's market price, before selling fees. Taxed at ${Math.round(t.collectibles_tax * 100)}% for collectibles, ${Math.round(t.stock_tax * 100)}% for stocks and ${Math.round(t.interest_tax * 100)}% for interest, assuming you held over a year. The S&amp;P figure is price only, without dividends.</p>`;
+}
+
+function ripHoldHTML(d){
+  if (!d.rip_or_hold || !d.rip_or_hold.length) return "";
+  const warn = [];
+  if (d.concentration) warn.push(`<b>${Math.round(d.concentration.share * 100)}%</b> of an average box's value comes from one card, <b>${esc(d.concentration.name)}</b>. If its price drops, so does the whole box value.`);
+  if (d.no_sale_share > 0.05) warn.push(`<b>${Math.round(d.no_sale_share * 100)}%</b> of the box value comes from cards with no recent sales. Those are valued at the typical price for their rarity, not their asking price.`);
+  return `<h2>Rip or hold?</h2>
+    <p class="note">What you'd pay delivered, what's inside on average, and your return if you open it, next to how holding it sealed has done. "Held sealed" is what already happened, not a forecast.</p>
+    ${warn.map(w => `<div class="alert">⚠️ <div>${w}</div></div>`).join("")}
+    <div id="riphold"></div>`;
+}
+
+function setupRipHold(d){
+  table($("#riphold"), d.rip_or_hold, [
+    {key: "l", label: "Buy", html: r => `<b>${esc(r.label)}</b><div class="sub small muted">${r.packs.toLocaleString()} pack${r.packs > 1 ? "s" : ""}</div>`},
+    {key: "p", label: "You'd pay", num: 1, html: r => money(r.pay)},
+    {key: "e", label: "EV (cards inside)", num: 1, cls: "hide-md", html: r => money(r.ev)},
+    {key: "n", label: "EV after selling", num: 1, html: r => money(r.ev_net)},
+    {key: "r", label: "Return if you rip", num: 1, html: r => `<b class="${r.rip_return >= 0 ? "up" : "down"}">${pct(r.rip_return)}</b>`},
+    {key: "c", label: "Chance a rip profits", num: 1, html: r => Math.round(r.chance_profit * 100) + "%"},
+    {key: "h", label: "Held sealed", num: 1, html: r => r.hold ? `<span class="${r.hold.change >= 0 ? "up" : "down"}">${pct(r.hold.change)}</span><div class="sub small muted">since ${fmtDate(r.hold.since)}${r.hold.per_year != null ? ` · ${pct(r.hold.per_year)}/yr` : ""}</div>` : '<span class="faint">—</span>'},
+  ]);
 }
 
 function openingHTML(d, b){
@@ -365,7 +395,7 @@ function setupOpening(d, b){
 
 function chaseCols(d){
   return [
-    {key: "name", label: "Card", sort: c => c.name, html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${esc(c.kind)} ${c.number ? "· " + esc(c.number) : ""}${c.thin ? ' · <span class="chip warn plain" title="Few recent sales">thin market</span>' : ""}</div></div></div>`},
+    {key: "name", label: "Card", sort: c => c.name, html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${esc(c.kind)} ${c.number ? "· " + esc(c.number) : ""}${flags(c)}</div></div></div>`},
     {key: "price", label: "Price", num: 1, sort: c => c.price, html: c => `<b>${money(c.price)}</b>`},
     {key: "zone", label: "Buy timing", sort: c => c.low90 ? c.price / c.low90 : null, html: c => `${quietChip(c.zone, c.zone_label)}${range(c.low90, c.high90, c.price)}`},
     ...(d.modeled ? [
@@ -455,7 +485,7 @@ async function viewCards(v, sm){
       low: (a, b) => (a.low90 ? a.price / a.low90 : 9) - (b.low90 ? b.price / b.low90 : 9)};
     rows.sort(f[sort]);
     table($("#card-table"), rows, [
-      {key: "name", label: "Card", html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${setLabel(c.set_name, c.set)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div></div></div>`},
+      {key: "name", label: "Card", html: c => `<div class="namecell">${thumb(c)}<div><div>${esc(c.name)}</div><div class="sub">${setLabel(c.set_name, c.set)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}${flags(c)}</div></div></div>`},
       {key: "price", label: "Price", num: 1, html: c => `<b>${money(c.price)}</b><div class="sub small muted">${esc(c.printing || "")}</div>`},
       {key: "d7", label: "7 days", num: 1, html: c => chg(d7(c))},
       {key: "zone", label: "Buy timing", cls: "hide-sm", html: c => quietChip(c.zone, c.zone_label) || '<span class="faint small">Normal</span>'},
@@ -486,7 +516,9 @@ async function viewMovers(v, sm){
 async function viewHow(v, sm){
   const s = sm.selling, b = sm.buying, z = sm.zones, t = sm.benchmark_tax;
   v.innerHTML = `<div class="prose" style="margin-top:22px"><h1>How the numbers work</h1>
-  <h2>Prices</h2><p>Every day this page pulls TCGplayer's prices through tcgcsv.com. "Market" is TCGplayer's market price, based on recent sales. When something has no recent sales, the cheapest listing is used instead. Cards marked <span class="chip warn plain">thin market</span> have few sales, so treat their price as rough.</p>
+  <h2>Prices</h2><p>Every day this page pulls TCGplayer's prices through tcgcsv.com. "Market" is TCGplayer's market price, based on recent sales. When something has no recent sales, the cheapest listing is used instead. Cards marked <span class="chip warn plain">no recent sales</span> only have asking prices; in box values they're counted at the typical sale price for their rarity in that set, and asking prices of $9,999 or more are ignored. <span class="chip plain">price falling</span> means the cheapest listing is well under the last sale.</p>
+  <h2>EV and return</h2><p><b>EV (expected value)</b> is what a pack, box or case holds on average at market prices. <b>EV after selling</b> takes off fees and shipping, and assumes you sell at the lower of the last sale and the cheapest listing, since you'd have to undercut current listings. <b>Return if you rip</b> is EV after selling compared with what you'd pay delivered.</p>
+  <h2>Checks before a box value is shown</h2><p>Every day, each set's box value must pass checks: every counted card carries the set's own numbering, no counted card has a version label without known odds, and the box value hasn't jumped more than 30% overnight while the box price held steady. If a check fails, that set shows "being checked" instead of a number until it passes.</p>
   <h2>Buy timing</h2><p>Each product's price is compared with its own last 90 days:</p>
   <p>${zoneChip("good_msrp", "At or below MSRP")} costs no more than retail. ${zoneChip("good_low", "Near its 90-day low")} is within ${Math.round(z.near_low_pct * 100)}% of the lowest price in 90 days. ${zoneChip("high", "Above its usual price")} is at least ${Math.round(z.above_usual_pct * 100)}% over its 90-day average. ${zoneChip("normal", "In its normal range")} is everything else. A product needs ${z.min_points} saved prices in the last 90 days before it gets a label.</p>
   <p>"You'd pay" is the cheapest listing plus ${(b.sales_tax * 100).toFixed(2)}% sales tax and estimated shipping (about ${money(b.ship_sealed.box)} for a box, ${money(b.ship_single)} for a single card).</p>
@@ -512,7 +544,7 @@ async function openCard(game, id, setCode, detail){
   const chase = d.chase.find(x => x.id === id) || c;
   const big = c.image ? c.image.replace(/_\d+w\.(jpg|png)$/i, "_in_1000x1000.$1") : null;
   body.innerHTML = `<div class="cardview"><div>${c.image ? `<img class="hero" src="${esc(big)}" onerror="this.onerror=null;this.src='${esc(c.image)}'" alt="${esc(c.name)}">` : '<div class="hero ph"></div>'}</div>
-    <div><h2 style="margin-top:0">${esc(c.name)}</h2><div class="muted">${setLabel(d.name, d.code)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}</div>
+    <div><h2 style="margin-top:0">${esc(c.name)}</h2><div class="muted">${setLabel(d.name, d.code)} · ${esc(c.kind || "")}${c.number ? " · " + esc(c.number) : ""}${flags(c)}</div>
       <div style="display:flex;gap:10px;align-items:center;margin:12px 0"><span class="big">${money(c.price)}</span>${zoneChip(c.zone, c.zone_label)}</div>
       ${range(c.low90, c.high90, c.price)}
       <div class="table-scroll" style="margin-top:14px"><table class="data"><thead><tr><th>Printing</th><th class="num">Market</th><th class="num">Lowest listing</th><th class="num">7 days</th><th class="num">30 days</th></tr></thead><tbody>

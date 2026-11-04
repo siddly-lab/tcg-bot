@@ -14,6 +14,7 @@ from tests import fixtures  # noqa: E402
 
 @pytest.fixture()
 def store(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "STATE", tmp_path / "state.json")
     monkeypatch.setattr(build, "HIST", tmp_path / "hist")
     monkeypatch.setattr(build, "RAW", tmp_path / "raw")
     monkeypatch.setattr(build, "OUT", tmp_path / "out")

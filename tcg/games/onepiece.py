@@ -46,6 +46,7 @@ def card_name(name: str) -> str:
 
 
 KNOWN_TAGS = {"alternate art", "parallel", "manga", "sp", "tr"}
+KNOWN_LABELS = KNOWN_TAGS
 CODE_TAG = re.compile(r"^(\d{3}|[A-Z]{1,4}\d{0,2}-\d{3})$")  # "(118)", "(OP14-084)", "(P-084)": just a card number
 
 
@@ -106,3 +107,16 @@ def sets_from_groups(groups: list[dict], products: dict[int, list[dict]], cfg: d
 
 def unknown_sets(groups, products, cfg, known_ids):
     return []
+
+
+def set_check(rec: dict, sset: dict) -> None:
+    """A regular card only counts toward a set if it carries that set's number (OP14-...).
+    SP and Treasure Rare reprints carry older numbers on purpose. TCGplayer lists some sets together
+    with an Extra Booster (OP14 + EB04); those EB cards don't come out of the OP packs."""
+    if rec.get("bucket") in (None, "Special", "SP", "TR"):
+        return
+    prefix = re.match(r"^[A-Z]+\d+", sset["code"])
+    num = rec.get("number") or ""
+    if prefix and not num.startswith(prefix.group(0)):
+        rec["bucket"] = None
+        rec["other_set"] = num.split("-")[0] or "another set"

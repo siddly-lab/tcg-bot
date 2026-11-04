@@ -52,8 +52,10 @@ def card_embed(card: dict, game_name: str = "") -> dict:
         fields.append(("Pull odds", one_in(card.get("boxes_per_hit")), True))
     where = " · ".join(x for x in (game_name, with_year(card.get("set_name") or card.get("set"), card.get("set_year")), card.get("number")) if x)
     desc = f"{card.get('kind', '')} · {where}".strip(" ·")
-    if card.get("thin"):
-        desc += "\n⚠️ Thin market: few recent sales, so treat the price as rough."
+    if card.get("no_sale"):
+        desc += "\n⚠️ No recent sales: this is only what sellers are asking."
+    elif card.get("falling"):
+        desc += "\nListings are well under the last sale, so the price is probably dropping."
     return {"title": clip(card["name"], 256), "url": card.get("url"), "description": desc, "fields": fields,
             "thumbnail": card.get("image"), "color": PURPLE}
 
@@ -78,6 +80,9 @@ def box_embed(s: dict, d: dict, paid: float | None, dash: str, game_name: str = 
     name = with_year(s["name"], s.get("year"))
     title = f"{game_name} · {name}" if game_name else name
     zone = f"\n{h.get('zone_label')} (90 days: {money(h.get('low90'))} to {money(h.get('high90'))})" if h.get("low90") else ""
+    if d.get("ev_hold"):
+        return {"title": f"{title}: box value being checked", "url": dash, "color": ORANGE,
+                "description": "This set's box value is hidden until it passes the daily checks: " + "; ".join(d["ev_hold"])}
     if not d.get("modeled"):
         chase = "\n".join(f"{c['name']}: {money(c['price'])}" for c in d.get("chase", [])[:5])
         return {"title": f"{title} {(h.get('kind_label') or 'sealed').lower()}", "url": dash, "color": PURPLE,
@@ -91,6 +96,8 @@ def box_embed(s: dict, d: dict, paid: float | None, dash: str, game_name: str = 
     hits = "\n".join(f"{x['label']}: {round(x['chance_in_box'] * 100)}% chance per box" for x in d.get("hit_odds", []))
     chase = "\n".join(f"{c['name']}: {money(c['price'])} ({one_in(c.get('boxes_per_hit'))})" for c in d.get("chase", [])[:5])
     ways = " · ".join(f"{w['label']} {money(w['per_pack'])}/pack" for w in d.get("ways_to_buy", [])[:3])
+    rip = "\n".join(f"{r['label']}: pay {money(r['pay'])}, rip {pct(r['rip_return'])}"
+                     + (f", held {pct(r['hold']['change'])} since {r['hold']['since']}" if r.get("hold") else "") for r in d.get("rip_or_hold", []))
     return {
         "title": f"{title} booster box at {money(paid)}", "url": dash, "color": GREEN if gap >= 0 else ORANGE,
         "description": f"**{d['open_vs_hold']['verdict']}**\nAn average box {'makes' if gap >= 0 else 'loses'} about "
@@ -102,6 +109,7 @@ def box_embed(s: dict, d: dict, paid: float | None, dash: str, game_name: str = 
             ("Typical box (pocket)", f"{money(n['median'])}\nhalf do better, half worse", True),
             ("Bad box / great box", f"{money(n['p10'])} / {money(n['p90'])}", True),
             ("Cheapest per pack", ways or "—", True),
+            ("Rip or hold", rip or "—", False),
             ("Hits", hits or "—", False),
             ("Top chase cards", clip(chase or "—", 1024), False),
         ],
@@ -117,6 +125,8 @@ def sets_embed(summary: dict, dash: str) -> dict:
         if s.get("ev"):
             lines.append(f"**{with_year(s['name'], s.get('year'))}**: {price}{zone} · pocket avg {money(s['ev']['box_net'])} · "
                          f"{round((s['ev']['beat_market'] or 0) * 100)}% of boxes pay for themselves")
+        elif s.get("ev_hold"):
+            lines.append(f"**{with_year(s['name'], s.get('year'))}**: {price}{zone} · box value being checked")
         elif s.get("released"):
             lines.append(f"**{with_year(s['name'], s.get('year'))}**: {price}{zone}")
         else:
