@@ -113,3 +113,7 @@
 8. Daily checks before a box value is shown: counted cards carry the set's numbering, no unknown labels, no 30%+ overnight jump while the box price holds. A failing set shows "being checked" instead of a number.
 9. If TCGplayer's feed didn't refresh, no duplicate day is saved and the page says prices didn't update.
 10. New "Rip or hold?" table on every set with a box value: pack, box and case, with what you'd pay delivered, EV, EV after selling, return if you rip, chance a rip profits, and how the sealed product has moved over the last 12 months. The Discord bot's `/box` shows the same.
+
+## 0.5.1 — Grail
+
+- New name: **Grail** (collector slang for the one card you'd chase forever). The dashboard header, browser tab, bot status and setup guide all say Grail. Name the Discord app "Grail" when you set it up; the repo and web address stay `tcg-bot`.
