@@ -64,8 +64,8 @@ def audit_game(common, gcfg, raw):
             kinds = collections.Counter(c["bucket"] for c in odd)
             if odd:
                 print(f"  numbering: {len(odd)} counted cards carry another set's number, by bucket {dict(kinds)}")
-                if set(kinds) - {"SP"}:
-                    issues["numbering"] += sum(v for k, v in kinds.items() if k != "SP")
+                if set(kinds) - {"SP", "TR"}:
+                    issues["numbering"] += sum(v for k, v in kinds.items() if k not in ("SP", "TR"))
         # 3. prices
         for b in sorted({c["bucket"] for c in inpack}):
             cs = [c for c in inpack if c["bucket"] == b]

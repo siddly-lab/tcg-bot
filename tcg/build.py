@@ -169,20 +169,25 @@ def ev_ready(buckets: dict[str, list], slots, bp) -> tuple[dict[str, list], list
     """Copy of the buckets where cards with no recent sales are valued at the typical (median) sale price
     of their rarity in the set, so one unsold asking price can't drive a box's value."""
     out, flagged = {}, []
+    in_packs = {b for sl in slots for b in sl["weights"]}
     for b, cards in buckets.items():
+        if b not in in_packs:
+            out[b] = cards  # not part of the box math anyway
+            continue
         pr = None
-        for s in slots:
-            if b in s["weights"]:
-                pr = bp.get(b) if b in s.get("upgrades", []) else s["printing"]
+        for sl in slots:
+            if b in sl["weights"]:
+                pr = bp.get(b) if b in sl.get("upgrades", []) else sl["printing"]
                 break
         sold = [ev.price_of(c, pr) for c in cards if not no_sale(c)]
         med = statistics.median(sold) if sold else 0.0
         new = []
         for c in cards:
             if no_sale(c):
-                asking = ev.price_of(c, pr)
-                flagged.append({"id": c["id"], "name": c["name"], "asking": asking or None, "used": round(med, 2)})
-                c = {**c, "prices": {sub: {"market": med, "low": None} for sub in (c["prices"] or {pr or "Normal": None})}}
+                asking = ev.price_of(c, pr) or None
+                used = min(asking, med) if asking and med else (med or asking or 0.0)  # never above its own asking price
+                flagged.append({"id": c["id"], "name": c["name"], "asking": asking, "used": round(used, 2)})
+                c = {**c, "prices": {sub: {"market": used, "low": None} for sub in (c["prices"] or {pr or "Normal": None})}}
             new.append(c)
         out[b] = new
     return out, flagged

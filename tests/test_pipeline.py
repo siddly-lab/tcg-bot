@@ -356,3 +356,14 @@ def test_stale_feed_is_not_saved_as_a_new_day(cfg, tmp_build):
     s = load(tmp_build, "riftbound", "summary.json")
     assert s["stale_since"] == "2026-11-02"
     assert sorted(p.name for p in (tmp_build / "hist" / "riftbound").glob("*.json.gz")) == ["2026-11-02.json.gz"]
+
+
+def test_no_sale_card_never_valued_above_its_ask(cfg):
+    buckets = {"Signature": [
+        {"id": 1, "name": "A", "prices": {"Foil": {"market": 800.0, "low": 700.0}}},
+        {"id": 2, "name": "B", "prices": {"Foil": {"market": 900.0, "low": 850.0}}},
+        {"id": 3, "name": "C", "prices": {"Foil": {"market": None, "low": 445.0}}},
+    ], "Special": [{"id": 4, "name": "D", "prices": {"Foil": {"market": None, "low": 5000.0}}}]}
+    slots = [{"name": "Foil", "count": 1, "printing": "Foil", "weights": {"Signature": 1.0}, "upgrades": ["Signature"]}]
+    out, flagged = build.ev_ready(buckets, slots, {"Signature": "Foil"})
+    assert [f["name"] for f in flagged] == ["C"] and flagged[0]["used"] == 445.0
