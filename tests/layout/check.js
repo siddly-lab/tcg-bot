@@ -85,6 +85,15 @@ async function check(page, label) {
       await page.waitForTimeout(400);
       problems.push(...await check(page, `${vp.name} #/${rt}`));
       pages++;
+      // stress pass: give every label and price the longest text it could ever show, so a rare label
+      // (like a set going "Above its usual price" for the first time) can't break the page on a real day
+      await page.evaluate(() => {
+        const longest = ["Above its usual price", "Not enough history yet", "Near its 90-day low", "In its normal range"]
+          .reduce((a, b) => (b.length > a.length ? b : a));
+        document.querySelectorAll(".chip").forEach(c => { c.textContent = c.textContent.length < longest.length ? longest : c.textContent; });
+        document.querySelectorAll(".settile .price, .signal .p, .big").forEach(p => { p.textContent = "$12,345.67"; });
+      });
+      problems.push(...(await check(page, `${vp.name} #/${rt} (longest labels)`)));
       // open the first chase card's pop-up on set pages
       if (rt.includes("/set/")) {
         const row = page.locator("#chase tbody tr[data-i]").first();

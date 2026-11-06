@@ -16,6 +16,8 @@ const ZONE = {good_msrp: "good", good_low: "good", normal: "", high: "bad", new:
 const flags = c => (c.no_sale ? ' <span class="chip warn plain" title="No recent sales: the price shown is only what sellers are asking">no recent sales</span>' : "")
   + (c.falling && !c.no_sale ? ' <span class="chip plain" title="The cheapest listing is well under the last sale, so the price is probably dropping">price falling</span>' : "")
   + (c.other_set ? ` <span class="chip plain" title="Carries ${esc(c.other_set)} numbering, so it isn't counted in this set's box value">${esc(c.other_set)} card</span>` : "");
+// shorter wording for tight spots like set tiles
+const SHORT = {good_msrp: "At/below MSRP", good_low: "Near 90-day low", high: "Above usual price", normal: "Normal range", new: "New"};
 const zoneChip = (z, label) => z ? `<span class="chip ${ZONE[z] ?? ""}">${esc(label || z)}</span>` : "";
 const quietChip = (z, label) => z && z !== "normal" ? zoneChip(z, label) + '<div style="height:6px"></div>' : "";
 
@@ -197,7 +199,7 @@ async function viewSets(v, sm){
     return `<a class="settile" href="${href("set", s.code)}"><div class="art">${art(s.image)}
         ${!s.released ? '<span class="chip info plain badge">Pre-order</span>' : s.ev ? '<span class="chip plain badge">Box value</span>' : s.ev_hold ? '<span class="chip warn plain badge">Being checked</span>' : ""}</div>
       <div class="body"><div class="t">${setHTML(s.name, s.code, s.year)}</div><div class="meta">${esc(s.code)} · ${fmtDate(s.release)}</div>
-      ${h.zone && h.zone !== "new" && h.zone !== "normal" ? `<div>${zoneChip(h.zone, h.zone_label)}</div>` : ""}
+      ${h.zone && h.zone !== "new" && h.zone !== "normal" ? `<div>${zoneChip(h.zone, SHORT[h.zone] || h.zone_label)}</div>` : ""}
       <div class="row"><div><div class="price">${money(h.market ?? h.low)}</div><div class="meta">${esc(h.kind_label || "")}</div></div>${spark(h.spark)}</div></div></a>`;
   };
   const yrs = g => { const ys = g.sets.map(s => s.year).filter(Boolean).sort(); return ys.length ? (ys[0] === ys[ys.length - 1] ? ys[0] : `${ys[0]}–${ys[ys.length - 1]}`) : ""; };
