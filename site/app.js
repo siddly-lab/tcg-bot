@@ -592,9 +592,13 @@ $("#modal").addEventListener("click", e => { if (e.target.id === "modal" || e.ta
   const hide = () => { box.classList.remove("on", "pinned"); tapped = false; };
   const canHover = matchMedia("(hover: hover)").matches;
   const isThumb = t => t.matches && t.matches("img.thumb");
-  document.addEventListener("mouseover", e => { if (canHover && isThumb(e.target)) show(e.target, e.clientX, e.clientY); });
-  document.addEventListener("mousemove", e => { if (canHover && isThumb(e.target) && !box.classList.contains("pinned")) place(e.clientX, e.clientY); });
-  document.addEventListener("mouseout", e => { if (canHover && isThumb(e.target) && !box.classList.contains("pinned")) hide(); });
+  // on a computer, every card or product picture zooms on hover: table thumbnails, Today's chase-card tiles,
+  // Today's sealed picks and the set page's box art. On a phone, tapping a tile opens its details instead.
+  const ZOOM = "img.thumb, .cardtile img, .signal img, .sethead .art img";
+  const isZoom = t => t.matches && t.matches(ZOOM);
+  document.addEventListener("mouseover", e => { if (canHover && isZoom(e.target)) show(e.target, e.clientX, e.clientY); });
+  document.addEventListener("mousemove", e => { if (canHover && isZoom(e.target) && !box.classList.contains("pinned")) place(e.clientX, e.clientY); });
+  document.addEventListener("mouseout", e => { if (canHover && isZoom(e.target) && !box.classList.contains("pinned")) hide(); });
   document.addEventListener("click", e => {
     if (isThumb(e.target) && !canHover){ e.preventDefault(); e.stopPropagation(); if (tapped) return hide(); show(e.target, 0, 0, true); tapped = true; return; }
     if (box.classList.contains("pinned")) hide();
