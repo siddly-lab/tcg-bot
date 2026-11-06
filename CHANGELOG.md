@@ -124,3 +124,9 @@
 - **Built-in updater.** A small `tcg-bot-updater` container checks GitHub every 5 minutes and restarts the bot when its code changes, with no DSM task needed. Library updates install on restart.
 - **Checked before shipping:** CI builds the bot's Docker image and starts it (it reaches the Discord login with a fake token), and builds every message the bot can send from that day's real data: 652 messages across 3 games and 162 sets, all within Discord's limits. Card search answers in under 60 ms.
 - Not yet tested against a live Discord server; that happens on your first run.
+
+## 0.6.1
+
+- **What was wrong:** the Nov 6 daily update didn't publish. A Pokémon set was "Above its usual price" for the first time, and on phones that label was wider than its set tile, so the layout check (correctly) refused to publish. Prices were still saved; the site showed the Nov 5 page.
+- **What changed:** labels can no longer run past their box (they wrap in tight spots), and set tiles use shorter wording ("Above usual price").
+- **Guard:** the layout check now also re-runs every page with every label and price swapped for the longest text it could ever show, so a label that has never appeared yet can't break a real day's publish. It reproduces this failure on the old code and passes on the new.
