@@ -130,3 +130,8 @@
 - **What was wrong:** the Nov 6 daily update didn't publish. A Pokémon set was "Above its usual price" for the first time, and on phones that label was wider than its set tile, so the layout check (correctly) refused to publish. Prices were still saved; the site showed the Nov 5 page.
 - **What changed:** labels can no longer run past their box (they wrap in tight spots), and set tiles use shorter wording ("Above usual price").
 - **Guard:** the layout check now also re-runs every page with every label and price swapped for the longest text it could ever show, so a label that has never appeared yet can't break a real day's publish. It reproduces this failure on the old code and passes on the new.
+
+## 0.6.2
+
+- **What was wrong:** card pictures on the Today page didn't enlarge on hover. The zoom only recognized the small thumbnails in tables.
+- **What changed:** on a computer, Today's chase-card tiles, Today's sealed picks and the box art on set pages now zoom on hover too. On a phone, tapping a chase-card tile still opens its details.
