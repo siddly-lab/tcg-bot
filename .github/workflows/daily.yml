@@ -3,6 +3,7 @@ name: daily
 on:
   schedule:
     - cron: "25 21 * * *"   # tcgcsv refreshes around 20:00 UTC (1pm Pacific)
+    - cron: "17 10 * * *"   # backup run (about 2-3am Pacific): re-publishes if the first run didn't, otherwise changes nothing
   workflow_dispatch:
   push:
     branches: [main]
@@ -51,7 +52,24 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.retry1.outputs.page_url || steps.retry2.outputs.page_url }}
+    # GitHub's hosting occasionally gets stuck uploading. Try up to three times, waiting between tries,
+    # so a hiccup on their side fixes itself instead of failing the day.
     steps:
       - id: deploy
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+        with: {timeout: 900000}
+      - if: steps.deploy.outcome == 'failure'
+        run: echo "GitHub Pages didn't finish, trying again in 2 minutes" && sleep 120
+      - id: retry1
+        if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+        with: {timeout: 900000}
+      - if: steps.deploy.outcome == 'failure' && steps.retry1.outcome == 'failure'
+        run: echo "Still stuck, one last try in 10 minutes" && sleep 600
+      - id: retry2
+        if: steps.deploy.outcome == 'failure' && steps.retry1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with: {timeout: 900000}
