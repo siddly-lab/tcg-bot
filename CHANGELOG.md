@@ -135,3 +135,9 @@
 
 - **What was wrong:** card pictures on the Today page didn't enlarge on hover. The zoom only recognized the small thumbnails in tables.
 - **What changed:** on a computer, Today's chase-card tiles, Today's sealed picks and the box art on set pages now zoom on hover too. On a phone, tapping a chase-card tile still opens its details.
+
+## 0.6.3
+
+- **What was wrong:** the Nov 10 daily run built everything and passed every check, but GitHub Pages got stuck uploading the site and timed out after 10 minutes. That was a hiccup on GitHub's side; re-running just the publish step worked on the first try.
+- **What changed:** publishing now waits up to 15 minutes and retries twice on its own (after 2 minutes, then after 10), so a stuck upload fixes itself without a failure email.
+- **Backup run:** a second scheduled run around 2-3am Pacific re-publishes if the first one didn't make it, and changes nothing otherwise (same prices, no duplicate history).
